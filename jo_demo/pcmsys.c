@@ -49,14 +49,12 @@ const static int logtbl[] = {
 #define PCM_SET_PITCH_WORD(oct, fns)										\
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
 
-
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
 
 	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
-
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -122,7 +120,7 @@ void			load_drv(void)
 	for (int i = 0; i < 0x80000; i+=4){
 		*(unsigned int *)(SNDRAM + i) = 0x00000000;
 	}
-	void * binary_buffer = jo_malloc(10 * 1024);
+	void * binary_buffer = (void*)2097152;
 	
 	// Copy driver over
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
@@ -179,7 +177,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 
 
 	numberPCMs++; //Increment pcm #
-	scsp_load += file_size;
+	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
@@ -225,7 +223,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 
 
 	numberPCMs++; //Increment pcm #
-	scsp_load += file_size;
+	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
