@@ -54,6 +54,7 @@ void	lead_function(void) //Link start to main
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Place all includes past this line
 #define PCM_CTRL_MAX (128)
+#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
 		GLOASSARY OF TERMS:
@@ -148,7 +149,7 @@ typedef struct{
 
 //Warning: Do not alter the master volume register from within the 68k program.
 //It's legal, but dangerous.
-volatile sysComPara * sh2Com = (volatile sysComPara  *)(ADDR_PRG + 0x10000);
+volatile sysComPara * sh2Com = (volatile sysComPara  *)(ADDR_PRG + DRV_SYS_END);
 volatile _ICSR * csr = (volatile _ICSR *)0x100000; //There are 32 of these.
 //
 _PCM_CTRL	pcmCtrlData[PCM_CTRL_MAX];
