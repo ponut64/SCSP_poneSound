@@ -9,4 +9,4 @@ Currently, only supports playback of uncompressed PCM files with a maximum # of 
 Linker script from CyberWarrior X [cWx]
 Compiler from... some random place on the internet? GCC 4.8.0
 
-Usage demo incomplete, but maybe if you are brave
+Usage demo
