@@ -2,7 +2,15 @@
 //this file is compiled separately
 //hopefully somewhat portable
 //
-#include <jo/jo.h> //Mostly to link us with SBL file system
+
+#define USE_JO (1)
+
+#if USE_JO
+	#include <jo/jo.h> //Mostly to link us with SBL file system
+#else
+	#include <SEGA_DMA.H>
+	#include <SEGA_GFS.H>
+#endif
 #include "pcmsys.h"
 
 
@@ -77,7 +85,7 @@ inline void smpc_issue_command(unsigned char cmd)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void	load_driver_binary(Sint8 * filename, void * buffer)
+void load_driver_binary(char * filename, void * buffer)
 {
 
 	GfsHn s_gfs;
@@ -103,15 +111,21 @@ void	load_driver_binary(Sint8 * filename, void * buffer)
 	smpc_wait_till_ready();
 	//
 	*master_volume = 0x20F; //Set max master volume + 4mbit memory // Very important, douglath
-	slDMACopy(buffer, (void*)SNDRAM, file_size);
-	slDMAWait();
+	#if USE_JO
+		slDMACopy(buffer, (void*)SNDRAM, file_size);
+		slDMAWait();
+	#else
+		DMA_CpuMemCopy1((void *)SNDRAM, buffer, file_size);
+		while (DMA_CpuResult() != DMA_CPU_END);
+	#endif
+
 	// Turn on Sound CPU again
 	smpc_wait_till_ready();
 	smpc_issue_command(SMPC_CMD_SNDON);
 	//
 }
 	
-void			load_drv(void)
+void load_drv(void)
 {
 	// Make sure SCSP is set to 512k mode
 	*(unsigned char *)(0x25B00400) = 0x02;
@@ -123,19 +137,19 @@ void			load_drv(void)
 	void * binary_buffer = (void*)2097152;
 	
 	// Copy driver over
-	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
+	load_driver_binary("SDRV.BIN", binary_buffer);
 
 }
 
-short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL)
+short calculate_bytes_per_blank(int sampleRate, int is8Bit, int isPAL)
 {
-	int frameCount = (isPAL == true) ? 50 : 60;
-	int sampleSize = (is8Bit == true) ? 8 : 16;
+	int frameCount = (isPAL) ? 50 : 60;
+	int sampleSize = (is8Bit) ? 8 : 16;
 	return ((sampleRate * sampleSize)>>3)/frameCount;
 	
 }
 
-short			load_16bit_pcm(Sint8 * filename, int sampleRate)
+short load_16bit_pcm(char * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
 
@@ -173,7 +187,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1);
-	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, false, PCM_SYS_REGION); //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 0, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = 0; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
@@ -184,7 +198,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
-short			load_8bit_pcm(Sint8 * filename, int sampleRate)
+short load_8bit_pcm(char * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
 
@@ -224,7 +238,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size);
-	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, true, PCM_SYS_REGION); //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 1, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = 1; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
@@ -235,20 +249,20 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
-void	pcm_play(short pcmNumber, char ctrlType, char volume)
+void pcm_play(short pcmNumber, char ctrlType, char volume)
 {
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
 	m68k_com->pcmCtrl[pcmNumber].volume = volume;
 	m68k_com->pcmCtrl[pcmNumber].loopType = ctrlType;
 }
 
-void	pcm_parameter_change(short pcmNumber, char volume, char pan)
+void pcm_parameter_change(short pcmNumber, char volume, char pan)
 {
 	m68k_com->pcmCtrl[pcmNumber].volume = volume;
 	m68k_com->pcmCtrl[pcmNumber].pan = pan;
 }
 
-void	pcm_cease(short pcmNumber)
+void pcm_cease(short pcmNumber)
 {
 
 	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0) //If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
