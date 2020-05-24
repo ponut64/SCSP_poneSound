@@ -95,8 +95,8 @@ extern short numberPCMs;
 
 void smpc_wait_till_ready(void);
 void smpc_issue_command(unsigned char cmd);
-short load_16bit_pcm(char *filename, int sampleRate);
-short load_8bit_pcm(char *filename, int sampleRate);
+short load_16bit_pcm(Sint8 * filename, int sampleRate);
+short load_8bit_pcm(Sint8 * filename, int sampleRate);
 void	load_drv(void);
 
 void	pcm_play(short pcmNumber, char ctrlType, char volume);

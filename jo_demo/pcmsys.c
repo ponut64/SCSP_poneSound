@@ -85,7 +85,7 @@ inline void smpc_issue_command(unsigned char cmd)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void load_driver_binary(char * filename, void * buffer)
+void load_driver_binary(Sint8 * filename, void * buffer)
 {
 
 	GfsHn s_gfs;
@@ -137,7 +137,7 @@ void load_drv(void)
 	void * binary_buffer = (void*)2097152;
 	
 	// Copy driver over
-	load_driver_binary("SDRV.BIN", binary_buffer);
+	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
 
 }
 
@@ -149,7 +149,7 @@ short calculate_bytes_per_blank(int sampleRate, int is8Bit, int isPAL)
 	
 }
 
-short load_16bit_pcm(char * filename, int sampleRate)
+short load_16bit_pcm(Sint8 * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
 
@@ -171,7 +171,8 @@ short load_16bit_pcm(char * filename, int sampleRate)
 	
 	GFS_Close(s_gfs);
 	
-	if(file_size > (128 * 1024)) return -1; //PCM size too large for general-purpose playback [could still work with timed execution & offets]
+	if(file_size > (128 * 1024)) return -1;
+	//PCM size too large for general-purpose playback [could still work with timed execution & offets]
 	
 	file_size += ((unsigned int)file_size & 1) ? 1 : 0;
 	file_size += ((unsigned int)file_size & 3) ? 2 : 0;
@@ -187,7 +188,7 @@ short load_16bit_pcm(char * filename, int sampleRate)
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1);
-	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 0, PCM_SYS_REGION); //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 0, PCM_SYS_REGION);
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = 0; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
@@ -198,7 +199,7 @@ short load_16bit_pcm(char * filename, int sampleRate)
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
-short load_8bit_pcm(char * filename, int sampleRate)
+short load_8bit_pcm(Sint8 * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
 
@@ -221,7 +222,8 @@ short load_8bit_pcm(char * filename, int sampleRate)
 	GFS_Close(s_gfs);
 	
 	
-	if(file_size > (64 * 1024)) return -1; //PCM size too large for general-purpose playback [could still work with timed execution & offets]
+	if(file_size > (64 * 1024)) return -1; 
+	//PCM size too large for general-purpose playback [could still work with timed execution & offets]
 	
 
 	file_size += ((unsigned int)file_size & 1) ? 1 : 0;
@@ -238,7 +240,7 @@ short load_8bit_pcm(char * filename, int sampleRate)
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size);
-	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 1, PCM_SYS_REGION); //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, 1, PCM_SYS_REGION);
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = 1; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
@@ -265,11 +267,13 @@ void pcm_parameter_change(short pcmNumber, char volume, char pan)
 void pcm_cease(short pcmNumber)
 {
 
-	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0) //If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
+	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0)
+		//If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
 	{												//Protected sounds have a permission state of "until they end".
 	m68k_com->pcmCtrl[pcmNumber].volume = 0;
 	} else {
-	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; //If it is a looping sound, the control method is to command it to stop.
+	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; 
+	//If it is a looping sound, the control method is to command it to stop.
 	}
 }
 

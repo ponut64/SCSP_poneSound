@@ -3,9 +3,16 @@
 #include "timer.h"
 #include "pcmsys.h"
 #include "input.h"
+#include "pcm_stm.h"
 
 extern Sint8 SynchConst; //SGL System Variable
 int framerate;
+
+//Sound Numbers
+short exertSnd;
+short winSnd;
+short stahpSnd;
+//
 
 void	update_gamespeed(void)
 {
@@ -43,45 +50,21 @@ void	update_gamespeed(void)
 }
 
 
-void	get_file_in_memory(Sint8 * filename, void * destination)
-{
-
-	GfsHn gfs_tga;
-	Sint32 sector_count;
-	Sint32 file_size;
-	
-	Sint32 local_name = GFS_NameToId(filename);
-
-//Open GFS
-	gfs_tga = GFS_Open((Sint32)local_name);
-//Get sectors
-	GFS_GetFileSize(gfs_tga, NULL, &sector_count, NULL);
-	GFS_GetFileInfo(gfs_tga, NULL, NULL, &file_size, NULL);
-	
-	GFS_Close(gfs_tga);
-	
-	GFS_Load(local_name, 0, (Uint32 *)destination, file_size);
-
-}
-
-
 void			my_draw(void)
 {
-
-	short winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
-	short cronchSnd = load_16bit_pcm((Sint8 *)"CRONCH.PCM", 15360);
-	short clickSnd = load_16bit_pcm((Sint8 *)"CLCK1.PCM", 15360);
 	
-while(1)
-{
 	update_gamespeed();
 	
 	jo_printf(0, 5, "P64 PCM Driver Usage Demo");
 	jo_printf(0, 6, "See lines 71, 72, and 73 of main.c");
-	jo_printf(0, 8, "Press A to initiate a semi-protected sound");
-	jo_printf(0, 10, "(Hold B to initiate a reverse-looping sound. )");
-	jo_printf(0, 11, "Release to stop the sound.)");
-	jo_printf(0, 13, "Hold C to repeat a protected sound");
+	jo_printf(0, 8, "Press A to start a semi-protected sound");
+	jo_printf(0, 9, "(will only start this sound type)");
+	jo_printf(0, 10, "(will restart whenever told to play)");
+	jo_printf(0, 12, "(Hold B to start an alt-looping sound.)");
+	jo_printf(0, 13, "Release to stop the sound.)");
+	jo_printf(0, 15, "Hold C to repeat a protected sound");
+	jo_printf(0, 16, "(this sound type plays while true)");
+	jo_printf(0, 17, "(and will only restart when done)");
 	
 	if(is_key_struck(DIGI_A))
 	{
@@ -90,25 +73,32 @@ while(1)
 	
 	if(is_key_struck(DIGI_B))
 	{
-	pcm_play(cronchSnd, PCM_RVS_LOOP, 6);
+	pcm_play(exertSnd, PCM_ALT_LOOP, 6);
 	} else if(is_key_release(DIGI_B)){
-	pcm_cease(cronchSnd);
+	pcm_cease(exertSnd);
 	}
 	
 	if(is_key_pressed(DIGI_C))
 	{
-	pcm_play(clickSnd, PCM_PROTECTED, 6);
+	pcm_play(stahpSnd, PCM_PROTECTED, 6);
 	}
 	
 	slSynch();
 }
+
+void			run_the_game(void)
+{
+	do{
+	master_file_system(my_draw);
+	}while(1);
 }
 
 void			sdrv_vblank_rq(void)
 {
-	operate_digital_pad1();
 	m68k_com->start = 1;
 	m68k_com->dT_ms = dt>>6;
+	music_vblIn();
+	operate_digital_pad1();
 }
 
 void			jo_main(void)
@@ -119,8 +109,13 @@ void			jo_main(void)
 
 	load_drv();
 	
+	 winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
+	 exertSnd = load_8bit_pcm((Sint8 *)"EXERT.PCM", 15360);
+	 stahpSnd = load_8bit_pcm((Sint8 *)"STAHP.PCM", 15360);
+	
 	slIntFunction(sdrv_vblank_rq);
-	my_draw();
+	init_music('L', (Sint8*)"EVE.MUS", 7);
+	run_the_game();
 }
 
 /*
