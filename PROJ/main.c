@@ -61,7 +61,7 @@ void	lead_function(void) //Link start to main
 			KX : EXECUTE KEY [select] [Start or stop the sound] [Reset to 0 by system]
 			KB : Key ON or Key OFF select [0 is OFF, 1 is ON]
 			SBCTL : Source bit control [???]
-			SSCTL : Source type control [0: PCM, 1: Noise Generator, 2: Waveform generator, 3: Illegal] - Pertains to LFO registers in 1&2
+			SSCTL : Source type control [0: PCM, 1: PCM + LFO (Noise allowed), 2: PCM + LFO (Noise disallowed), 3: Illegal] 
 			LPCTL : loop control [0: Sound ends when LEA is reached, 1: normal loop, 2: reverse loop, 3: alternating loop]
 					It is important to note that looping commands still need continuous KEY_ON setting?
 			8B : PCM 8-bit wave data boolean [1: 8 bit 0: 16 bit]
@@ -75,9 +75,12 @@ void	lead_function(void) //Link start to main
 			TL : Total level [Bitwise data struct which may attenuate or divide the waveform of the input]
 			...
 			...
-			RE : LFO Reset [???] - lFO pertains to the sound generator, both FM and waveform [not PCM though]
-			PLF.. : LFO frequency modulation wave form select [OWS] or select [S] [PITCH] [???]
-			ALF.. : LFO amplitude modulation wave form select [OWS] or select [A] [AMP]	[???]
+			RE : LFO Reset [???] - lFO reset LOW will start LFO, LFO reset HIGH .. appears to just turn it off?
+			LFOF : Low-frequency oscillator frequency selection
+			PLFOWS : Waveform type select for pitch oscillator 
+			PLFOS : Modulation level of pitch
+			ALFOWS : Waveform type select for amplitude oscillator
+			ALFOS : Modulation level of amplitude (volume)
 			...
 			DISDL: Direct data send level [???]
 			DIPAN: Direct data pan level [MSB: Left/right boolean, bits 0-4: distance from center]
@@ -128,6 +131,7 @@ typedef struct{
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
 	unsigned char bitDepth; //0 or 1, boolean
+	unsigned char op_type; //0 for raw PCM, 1 for LFO with noise, 2 for LFO no noise, all else illegal
 	unsigned short hiAddrBits; //bits 19-16 of...
 	unsigned short loAddrBits; //Two 16-bit chunks that when combined, form the start address of the sound.
 	unsigned short LSA; //The # of samples forward from the start address to return to after loop.
@@ -136,6 +140,7 @@ typedef struct {
 	unsigned short pitchword; //the OCT & FNS word to use in the ICSR, verbatim.
 	unsigned char pan; //Direct pan setting
 	unsigned char volume; //Direct volume setting
+	unsigned short lfo_data; //LFO (PSG) wave data modulation control register, see SCSP manual p.77 for more info.
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
@@ -197,13 +202,16 @@ void	play_volatile_sound(_PCM_CTRL * lctrl)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 	
-	csr[cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | Bit depth | high bits of address
+	csr[cst].keys = (1<<11 | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	//Key select ON | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
 	csr[cst].playsize = lctrl->playsize;
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
@@ -226,20 +234,20 @@ void	play_protected_sound(short index)
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 
 		
-	csr[cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | Bit depth | high bits of address
+	csr[cst].keys = (1<<11  | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	//Key select ON | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
 	csr[cst].playsize = lctrl->playsize;
 	csr[cst].oct_fns = lctrl->pitchword;
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
 	
+	csr[cst].lfo_data = lctrl->lfo_data;
+	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
 	
 	csr[cst].keys |= 1<<12; //KEY EXECUTE must be written last.
-									} else {
-	csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
-	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 									}
 	
 		if(dataTimers[cst] >= (lctrl->playsize<<(1 - lctrl->bitDepth)) ) //1 - bitDepth is an expression that will or will not multiply the playsize by 2,
@@ -253,6 +261,10 @@ void	play_protected_sound(short index)
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
+			
+			csr[cst].lfo_data = lctrl->lfo_data;
+			csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
+			csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 		}
 }
 
@@ -270,13 +282,16 @@ void	play_semi_protected_sound(short index)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 	
-	csr[cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | Bit depth | high bits of address
+	csr[cst].keys = (1<<11  | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	//Key select ON | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
 	csr[cst].playsize = lctrl->playsize;
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
@@ -296,6 +311,10 @@ void	play_semi_protected_sound(short index)
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
+			
+			csr[cst].lfo_data = lctrl->lfo_data;
+			csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
+			csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 		}
 		
 		
@@ -313,13 +332,16 @@ void	set_looping_sound(short index)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 			}
-	csr[cst].keys = (1<<11 | lctrl->loopType<<5 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | loop type | Bit depth | high bits of address
+	csr[cst].keys = (1<<11 | lctrl->loopType << 5 | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	//Key select ON | loop type | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
 	csr[cst].playsize = lctrl->playsize;
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
