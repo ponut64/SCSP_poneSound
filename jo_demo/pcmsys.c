@@ -163,6 +163,7 @@ short load_16bit_pcm(Sint8 * filename, int sampleRate)
 	if( (int)scsp_load > 0x7F800)
 	{
 		jo_printf(0, 0, "(Sound RAM is full)");
+		return -1;
 	}
 
 	GfsHn s_gfs;
@@ -233,6 +234,7 @@ short load_8bit_pcm(Sint8 * filename, int sampleRate)
 	if( (int)scsp_load > 0x7F800)
 	{
 		jo_printf(0, 0, "(Sound RAM is full)");
+		return -1;
 	}
 
 	GfsHn s_gfs;
@@ -296,11 +298,12 @@ short load_8bit_pcm(Sint8 * filename, int sampleRate)
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
-void pcm_play(short pcmNumber, char ctrlType, char volume)
+void pcm_play(short pcmNumber, char ctrlType, char volume, char interrupt_when_done)
 {
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
 	m68k_com->pcmCtrl[pcmNumber].volume = volume;
 	m68k_com->pcmCtrl[pcmNumber].loopType = ctrlType;
+	m68k_com->pcmCtrl[pcmNumber].intback = interrupt_when_done;
 }
 
 void pcm_parameter_change(short pcmNumber, char volume, char pan)
