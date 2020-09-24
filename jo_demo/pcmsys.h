@@ -88,7 +88,35 @@ typedef struct{
 	_PCM_CTRL * pcmCtrl;
 	//
 	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
+	short intcom; //Semi-protected playback directive slot; intended to be written to by SH2 after a sound sys interrupt.
 } sysComPara;
+
+	/*
+INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
+	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
+		|-------------------------------------------------------------------------------------------------------------------------------|
+SOUND	|		
+ENABLE	|	0	|	0	|	0	|	0	|	0	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|
+PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
+RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+		|	0	|	0	|	0	|	0	|	0	|	1FS	|MIDOUT	|TimerC	|TimerA	|TimerB	|CPU/SCU|	DMA	|MIDIIN	|Extern	|Extern	|Extern	|
+SCU		|
+ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
+RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+	*/
+
+
+//
+extern unsigned short * sound_cpu_interrupt_enable;
+extern unsigned short * sound_cpu_interrupt_pending;
+extern unsigned short * sound_cpu_interrupt_reset;
+	
+//
+extern unsigned short * sound_sys_scu_interrupt_enable;
+extern unsigned short * sound_sys_scu_interrupt_pending;
+extern unsigned short * sound_sys_scu_interrupt_reset;
+//
 
 //
 extern	sysComPara * m68k_com;

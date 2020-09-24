@@ -3,11 +3,14 @@
 #define ADDR_MAX (0x7F000)
 #define ADDR_STACK (0x80000 - 0x400)
 #define ADDR_END (0x80000)
+
+void _start();
+
 //Big credit to cWx :: cyberWarriorX for a sound driver prototype and most importatly, the linker script!
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int * vecTable[256] __attribute__ ((section ("VECTORS"))) =
 {
-(int*)ADDR_STACK, (int*)ADDR_PRG, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
+(int*)ADDR_STACK, (int*)_start, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
@@ -45,18 +48,10 @@ int * vecTable[256] __attribute__ ((section ("VECTORS"))) =
 uArch warning:
 Some operations that handle 4-bytes (void, boolean, int, unsigned int, pointers) will not work as expected.
 */
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void	lead_function(void) //Link start to main
-{
-	__asm__("jmp _start"); //note that _start is the ASM label that equates to the lead function in this compiler.
-							//In a normal compiler, it would be "main".
-}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Place all includes past this line
 #define PCM_CTRL_MAX (128)
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
-
-
 	
 	/*
 INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
@@ -71,17 +66,81 @@ SCU		|
 ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
 PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
 RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+
+ 	/////////////////////////////////////////////
+	// Required procedure for using SCU interrupt
+	//Reset SCU interrupt
+	*sound_sys_scu_interrupt_reset |= 0x20;
+	//Enable SCU interrupt
+	*sound_sys_scu_interrupt_enable |= 0x20;
+	//Fire SCU interrupt
+	*sound_sys_scu_interrupt_pending |= 0x20;
+	///////////////////////////////////////////// 
+
 	*/
 
 //
-unsigned short * sound_interrupt_enable = (unsigned short *)(0x100410 + 14);
-unsigned short * sound_interrupt_pending = (unsigned short *)(0x100410 + 16);
-unsigned short * sound_interrupt_reset = (unsigned short *)(0x100410 + 18);	
+unsigned short * sound_cpu_interrupt_enable = (unsigned short *)(0x100410 + 14);
+unsigned short * sound_cpu_interrupt_pending = (unsigned short *)(0x100410 + 16);
+unsigned short * sound_cpu_interrupt_reset = (unsigned short *)(0x100410 + 18);	
 	
 //
-unsigned short * scu_interrupt_enable = (unsigned short *)(0x100410 + 26);
-unsigned short * scu_interrupt_pending = (unsigned short *)(0x100410 + 28);
-unsigned short * scu_interrupt_reset = (unsigned short *)(0x100410 + 30);
+unsigned short * sound_sys_scu_interrupt_enable = (unsigned short *)(0x100410 + 26);
+unsigned short * sound_sys_scu_interrupt_pending = (unsigned short *)(0x100410 + 28);
+unsigned short * sound_sys_scu_interrupt_reset = (unsigned short *)(0x100410 + 30);
+
+/*
+
+Interrupts TO 68k CPU methodology:
+There are 7 interrupt vectors available, and three registers to configure them.
+On top of that, there are 8 possible interrupts. The 7 interrupts are then arrayed in a "level", from 1-7.
+
+It should be noted that an all zero interrupt level is no vector, so no interrupt occurs.
+
+INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
+	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
+		|-------------------------------------------------------------------------------------------------------------------------------|
+SOUND	|												SCILV0 is bit 0 of the three-bit level code, SCILV1 is bit 1, etc...
+SCILV0	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B0	|	B0	|	B0	|	B0	|	B0	|	B0	|	B0	|
+SCILV1	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B1	|	B1	|	B1	|	B1	|	B1	|	B1	|	B1	|
+SCILV2	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B2	|	B2	|	B2	|	B2	|	B2	|	B2	|	B2	|
+		|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	*	|TimerA	|	CPU	|	DMA	|MIDIN	|Extern	|Extern	|Extern	|
+																	* = Timer B, Timer C, MIDI-OUT, 1-sample int
+																	
+The next step of the interrupts to sound CPU is knowing which 
+interrupt vector in the table corresponds to which level of interrupt.
+vecTable[25] = Level 1
+vecTable[26] = Level 2
+vecTable[27] = Level 3
+vecTable[28] = Level 4
+vecTable[29] = Level 5
+vecTable[30] = Level 6
+vecTable[31] = Level 7
+
+To use a software interrupt (via SH2), first write 0x20 to (let's say..) SCILV0 (sound_cpu_interrupt_level_table_0).
+Then, from SH2, write 0x20 to sound_cpu_interrupt_reset.
+Then write the same to sound_cpu_interrupt_enable.
+Then write the same to sound_cpu_interrupt_pending.
+At that point, the 68k will recieve the interrupt, and the PC will jump to the address at vecTable[25], in this case.
+
+IMPORTANT: Modifying the interrupt vector table while 68k is powered on is a big no-no and will cause it to crash.
+
+ 	/////////////////////////////////////////////
+	// Required procedure for sending interrupt to 68k
+	//Reset 68k CPU interrupt
+	*sound_cpu_interrupt_reset |= 0x20;
+	//Enable 68k CPU interrupt
+	*sound_cpu_interrupt_enable |= 0x20;
+	//Fire 68k CPU interrupt
+	*sound_cpu_interrupt_pending |= 0x20;
+	///////////////////////////////////////////// 
+
+*/
+
+unsigned short * sound_cpu_interrupt_level_table_0 = (unsigned short *)(0x100410 + 20);
+unsigned short * sound_cpu_interrupt_level_table_1 = (unsigned short *)(0x100410 + 22);
+unsigned short * sound_cpu_interrupt_level_table_2 = (unsigned short *)(0x100410 + 24);	
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
@@ -180,6 +239,7 @@ typedef struct{
 	_PCM_CTRL * pcmCtrl;
 	//
 	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
+	short intcom; //Semi-protected playback directive slot; intended to be written to by SH2 after a sound sys interrupt.
 } sysComPara;
 
 //Warning: Do not alter the master volume register from within the 68k program.
@@ -199,7 +259,8 @@ int			dataTimers[32];
 void	driver_data_init(void)
 {
 		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); //I'm so bad at C it took me an hour to realize I had to typecast this
-															//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
+			//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
+		sh2Com->intcom = -1;
 	for(char i = 0; i < 32; i++)
 	{
 		ICSR_Busy[i] = -1;
@@ -217,17 +278,9 @@ void	driver_data_init(void)
 	//Set max master volume (0-15 volume levels valid).
 	unsigned short * master_volume = (unsigned short *)0x100400;
 	*master_volume |= 15;
-	
-/* 	/////////////////////////////////////////////
-	// Required procedure for using SCU interrupt
-	//Reset SCU interrupt
-	*scu_interrupt_reset |= 0x20;
-	//Enable SCU interrupt
-	*scu_interrupt_enable |= 0x20;
-	//Fire SCU interrupt
-	*scu_interrupt_pending |= 0x20;
-	///////////////////////////////////////////// */
+
 }
+
 /*
 NOTICE: To play the same sound struct multiple times per frame (why?) you have to copy its PCM_CTRL struct into another array member, and issue it to play.
 */
@@ -305,11 +358,11 @@ void	play_protected_sound(short index)
 				/////////////////////////////////////////////
 				// Required procedure for using SCU interrupt
 				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
+				*sound_sys_scu_interrupt_reset |= 0x20;
 				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
+				*sound_sys_scu_interrupt_enable |= 0x20;
 				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
+				*sound_sys_scu_interrupt_pending |= 0x20;
 				/////////////////////////////////////////////
 			}
 			
@@ -368,11 +421,11 @@ void	play_semi_protected_sound(short index)
 				/////////////////////////////////////////////
 				// Required procedure for using SCU interrupt
 				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
+				*sound_sys_scu_interrupt_reset |= 0x20;
 				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
+				*sound_sys_scu_interrupt_enable |= 0x20;
 				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
+				*sound_sys_scu_interrupt_pending |= 0x20;
 				/////////////////////////////////////////////
 			}
 			
@@ -547,7 +600,32 @@ void	pcm_control_loop(void)
 			icsr_index++;
 		}
 	}
-
+	
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//	Immediate playback directive of sound # via INTCOM slot, INTCOM slot is always played as semi-protected.
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	if(sh2Com->intcom >= 0)
+	{
+	lctrl = &pcmCtrlData[sh2Com->intcom];
+	lctrl->sh2_permit = 1;
+	lctrl->loopType = -2;
+		if(lctrl->icsr_target == -1)
+		{
+			while(ICSR_Busy[icsr_index] != -1)
+			{
+				icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
+			}
+			if(icsr_index < 32)
+			{
+				lctrl->icsr_target = icsr_index;
+				play_semi_protected_sound(sh2Com->intcom);
+			}
+		} else {
+			play_semi_protected_sound(sh2Com->intcom);
+		}
+	}
+	//Clear INTCOM slot
+	sh2Com->intcom = -1;
 }
 
 void	_start(void)
