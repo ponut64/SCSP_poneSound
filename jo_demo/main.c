@@ -1,126 +1,91 @@
 
 #include <jo/jo.h>
-#include "timer.h"
 #include "pcmsys.h"
-#include "input.h"
+#include <SEGA_INT.h>
 
-extern Sint8 SynchConst; //SGL System Variable
 int framerate;
 
-void	update_gamespeed(void)
-{
-	int frmrt = dt>>6;
-	timer();
-	
- 	static int lastTimes[66];
-	static int time_selector = 0;
-	static int bad_frames = 0;
-	
-	lastTimes[time_selector] = frmrt;
-	bad_frames += (frmrt > 40) ? 1 : 0;
-	time_selector = (time_selector > 66) ? 0 : time_selector+1;
-	
-    framerate = (frmrt)>>4;
-	jo_printf(0, 3, "(%i) Bad Frames)", bad_frames);
-	
-    if (framerate <= 0) framerate=1;
-    else if (framerate > 5) framerate=5;
-
-		//Framegraph
-	char curLine = frmrt;
-	char prevLine = (time_selector < 1) ? lastTimes[65] : lastTimes[time_selector-1];
-	char nthLine = (time_selector < 2) ? lastTimes[65] : lastTimes[time_selector-2];
-
-	jo_draw_background_line(time_selector+4, 22, time_selector+4, 8, 0xC210);
-	jo_draw_background_line(time_selector+4, 22, time_selector+4, (curLine>>2)+6, 0x8200);
-		if(time_selector > 1){
-	jo_draw_background_line((time_selector-1)+4, 22, (time_selector-1)+4, (prevLine>>2)+6, 0xC000);
-		}
-		if(time_selector > 2){
-	jo_draw_background_line((time_selector-2)+4, 22, (time_selector-2)+4, (nthLine>>2)+6, 0x8010);
-		} 
-		//
-}
-
-
-void	get_file_in_memory(Sint8 * filename, void * destination)
-{
-
-	GfsHn gfs_tga;
-	Sint32 sector_count;
-	Sint32 file_size;
-	
-	Sint32 local_name = GFS_NameToId(filename);
-
-//Open GFS
-	gfs_tga = GFS_Open((Sint32)local_name);
-//Get sectors
-	GFS_GetFileSize(gfs_tga, NULL, &sector_count, NULL);
-	GFS_GetFileInfo(gfs_tga, NULL, NULL, &file_size, NULL);
-	
-	GFS_Close(gfs_tga);
-	
-	GFS_Load(local_name, 0, (Uint32 *)destination, file_size);
-
-}
-
+//Sound Numbers
+short exertSnd;
+short winSnd;
+short stahpSnd;
+short aweSnd;
+//
 
 void			my_draw(void)
 {
-
-	short winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
-	short cronchSnd = load_16bit_pcm((Sint8 *)"CRONCH.PCM", 15360);
-	short clickSnd = load_16bit_pcm((Sint8 *)"CLCK1.PCM", 15360);
 	
-while(1)
-{
-	update_gamespeed();
+	 jo_printf(0, 5, "P64 PCM Driver Usage Demo");
+	jo_printf(0, 8, "Press A to start a semi-protected sound");
+	jo_printf(0, 9, "(will only start this sound type)");
+	jo_printf(0, 10, "(will restart whenever told to play)");
+	jo_printf(0, 12, "(Hold B to start an alt-looping sound.");
+	jo_printf(0, 13, "Release to stop the sound.)");
+	jo_printf(0, 15, "Hold C to repeat a protected sound");
+	jo_printf(0, 16, "(this sound type plays while true)");
+	jo_printf(0, 17, "(and will only restart when done)");
 	
-	jo_printf(0, 5, "P64 PCM Driver Usage Demo");
-	jo_printf(0, 6, "See lines 71, 72, and 73 of main.c");
-	jo_printf(0, 8, "Press A to initiate a semi-protected sound");
-	jo_printf(0, 10, "(Hold B to initiate a reverse-looping sound. )");
-	jo_printf(0, 11, "Release to stop the sound.)");
-	jo_printf(0, 13, "Hold C to repeat a protected sound");
+	// jo_printf(0, 18, "Y pans sound from A button");
 	
-	if(is_key_struck(DIGI_A))
+	if(jo_is_input_key_down(0, JO_KEY_A))
 	{
 	pcm_play(winSnd, PCM_SEMI, 6);
 	}
 	
-	if(is_key_struck(DIGI_B))
+	if(jo_is_input_key_pressed(0, JO_KEY_B))
 	{
-	pcm_play(cronchSnd, PCM_RVS_LOOP, 6);
-	} else if(is_key_release(DIGI_B)){
-	pcm_cease(cronchSnd);
+		jo_printf(0, 21, "(1)");
+	pcm_play(exertSnd, PCM_ALT_LOOP, 6);
+	} else {
+		jo_printf(0, 21, "(0)");
+	pcm_cease(exertSnd);
 	}
 	
-	if(is_key_pressed(DIGI_C))
+	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
-	pcm_play(clickSnd, PCM_PROTECTED, 6);
+	pcm_play(aweSnd, PCM_PROTECTED, 6);
 	}
 	
-	slSynch();
-}
+	if(jo_is_input_key_pressed(0, JO_KEY_Y))
+	{
+	//pcm_parameter_change(winSnd, 5, PCM_PAN_LEFT);
+	
+	} else {
+	//pcm_parameter_change(winSnd, 5, PCM_PAN_RIGHT);
+	}
+
+	unsigned int * dummy = (unsigned int *)(SNDRAM);
+
+	//slSynch();
 }
 
 void			sdrv_vblank_rq(void)
 {
-	operate_digital_pad1();
 	m68k_com->start = 1;
-	m68k_com->dT_ms = dt>>6;
+	m68k_com->dT_ms = delta_time>>6; //The driver currently doesn't need this, but you may as well let it know, yeah?
 }
 
 void			jo_main(void)
 {
-	slDynamicFrame(ON); 
-    SynchConst=2;  
 	jo_core_init(JO_COLOR_Black);
 
 	load_drv();
 	
-	slIntFunction(sdrv_vblank_rq);
-	my_draw();
+	/*
+	To convert a sound to 16-bit
+	ffmpeg -i %this%.wav -f s16be -ac 1 -ar (bitrate) %this%.PCM
+	To convert a sound to 8-bit
+	ffmpeg -i %this%.wav -f s8 -ac 1 -ar (bitrate) %this%.PCM
+	*/
+	 winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
+	 exertSnd = load_8bit_pcm((Sint8 *)"EXERT.PCM", 15360);
+	 stahpSnd = load_8bit_pcm((Sint8 *)"STAHP.PCM", 15360);
+	 aweSnd = load_8bit_pcm((Sint8 *)"AWSUM.PCM", 15360);
+	 
+	
+	jo_core_add_vblank_callback(sdrv_vblank_rq);
+	jo_core_add_callback(my_draw);
+	jo_core_run();
 }
 
 /*

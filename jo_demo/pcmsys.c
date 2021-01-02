@@ -6,7 +6,7 @@
 #include "pcmsys.h"
 
 
-const static int logtbl[] = {
+static const int logtbl[] = {
 /* 0 */		0, 
 /* 1 */		1, 
 /* 2 */		2, 2, 
@@ -58,7 +58,7 @@ const static int logtbl[] = {
 
 //////////////////////////////////////////////////////////////////////////////
 
-inline void smpc_wait_till_ready (void)
+void smpc_wait_till_ready (void)
 {
    // Wait until SF register is cleared
    while(SMPC_REG_SF & 0x1) { }
@@ -66,7 +66,7 @@ inline void smpc_wait_till_ready (void)
 
 //////////////////////////////////////////////////////////////////////////////
 
-inline void smpc_issue_command(unsigned char cmd)
+void smpc_issue_command(unsigned char cmd)
 {
    // Set SF register so that no other command can be issued.
    SMPC_REG_SF = 1;

@@ -1,15 +1,16 @@
 @ECHO Off
-SET EMULATOR_DIR=..\..\Emulators
-SET VCD_DIR=C:\Program Files (x86)\Elaborate Bytes\VirtualCloneDrive
 
-if exist sl_coff.iso (
+SET EMULATOR_DIR=..\..\Emulators
+SET DT_DIR=C:\Program Files (x86)\DAEMON Tools Lite
+
+if exist game.iso (
 echo Mounting image...
-"%VCD_DIR%\vcdmount.exe" sl_coff.iso
+"%DT_DIR%\DTLite.exe" -mount 0,game.cue
 cd "%EMULATOR_DIR%\SSF\"
 echo Running SSF...
 "SSF.exe"
 echo Unmounting image...
-"%VCD_DIR%\vcdmount.exe" /u
+"%DT_DIR%\DTLite.exe" -unmount 0
 ) else (
 echo Please compile first !
 pause
