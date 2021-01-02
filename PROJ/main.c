@@ -3,11 +3,14 @@
 #define ADDR_MAX (0x7F000)
 #define ADDR_STACK (0x80000 - 0x400)
 #define ADDR_END (0x80000)
+
+void _start();
+
 //Big credit to cWx :: cyberWarriorX for a sound driver prototype and most importatly, the linker script!
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int * vecTable[256] __attribute__ ((section ("VECTORS"))) =
 {
-(int*)ADDR_STACK, (int*)ADDR_PRG, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
+(int*)ADDR_STACK, (int*)_start, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
 (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END, (int*)ADDR_END,
@@ -45,47 +48,11 @@ int * vecTable[256] __attribute__ ((section ("VECTORS"))) =
 uArch warning:
 Some operations that handle 4-bytes (void, boolean, int, unsigned int, pointers) will not work as expected.
 */
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void	lead_function(void) //Link start to main
-{
-	__asm__("jmp _start"); //note that _start is the ASM label that equates to the lead function in this compiler.
-							//In a normal compiler, it would be "main".
-}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Place all includes past this line
 #define PCM_CTRL_MAX (128)
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
-
-
 	
-<<<<<<< HEAD
-=======
-	/*
-INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
-	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
-		|-------------------------------------------------------------------------------------------------------------------------------|
-SOUND	|		
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-		|	0	|	0	|	0	|	0	|	0	|	1FS	|MIDOUT	|TimerC	|TimerA	|TimerB	|CPU/SCU|	DMA	|MIDIIN	|Extern	|Extern	|Extern	|
-SCU		|
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-	*/
-
-//
-unsigned short * sound_interrupt_enable = (unsigned short *)(0x100410 + 14);
-unsigned short * sound_interrupt_pending = (unsigned short *)(0x100410 + 16);
-unsigned short * sound_interrupt_reset = (unsigned short *)(0x100410 + 18);	
-	
-//
-unsigned short * scu_interrupt_enable = (unsigned short *)(0x100410 + 26);
-unsigned short * scu_interrupt_pending = (unsigned short *)(0x100410 + 28);
-unsigned short * scu_interrupt_reset = (unsigned short *)(0x100410 + 30);
-
->>>>>>> parent of dbe01dc... Set new sound on intback
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
 		GLOASSARY OF TERMS:
@@ -179,11 +146,6 @@ typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
 	_PCM_CTRL * pcmCtrl;
-<<<<<<< HEAD
-=======
-	//
-	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
->>>>>>> parent of dbe01dc... Set new sound on intback
 } sysComPara;
 
 //Warning: Do not alter the master volume register from within the 68k program.
@@ -203,11 +165,7 @@ int			dataTimers[32];
 void	driver_data_init(void)
 {
 		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); //I'm so bad at C it took me an hour to realize I had to typecast this
-<<<<<<< HEAD
 			//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
-=======
-															//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
->>>>>>> parent of dbe01dc... Set new sound on intback
 	for(char i = 0; i < 32; i++)
 	{
 		ICSR_Busy[i] = -1;
@@ -224,17 +182,9 @@ void	driver_data_init(void)
 	//Set max master volume (0-15 volume levels valid).
 	unsigned short * master_volume = (unsigned short *)0x100400;
 	*master_volume |= 15;
-	
-/* 	/////////////////////////////////////////////
-	// Required procedure for using SCU interrupt
-	//Reset SCU interrupt
-	*scu_interrupt_reset |= 0x20;
-	//Enable SCU interrupt
-	*scu_interrupt_enable |= 0x20;
-	//Fire SCU interrupt
-	*scu_interrupt_pending |= 0x20;
-	///////////////////////////////////////////// */
+
 }
+
 /*
 NOTICE: To play the same sound struct multiple times per frame (why?) you have to copy its PCM_CTRL struct into another array member, and issue it to play.
 */
@@ -305,24 +255,6 @@ void	play_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
-<<<<<<< HEAD
-=======
-			
-			if(lctrl->intback != 0)
-			{
-				sh2Com->intlast = index;
-				/////////////////////////////////////////////
-				// Required procedure for using SCU interrupt
-				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
-				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
-				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
-				/////////////////////////////////////////////
-			}
-			
->>>>>>> parent of dbe01dc... Set new sound on intback
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -370,25 +302,6 @@ void	play_semi_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
-<<<<<<< HEAD
-=======
-			
-			
-			if(lctrl->intback != 0)
-			{
-				sh2Com->intlast = index;
-				/////////////////////////////////////////////
-				// Required procedure for using SCU interrupt
-				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
-				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
-				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
-				/////////////////////////////////////////////
-			}
-			
->>>>>>> parent of dbe01dc... Set new sound on intback
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -560,10 +473,6 @@ void	pcm_control_loop(void)
 			icsr_index++;
 		}
 	}
-<<<<<<< HEAD
-=======
-
->>>>>>> parent of dbe01dc... Set new sound on intback
 }
 
 void	_start(void)

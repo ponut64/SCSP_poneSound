@@ -85,11 +85,6 @@ typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
 	_PCM_CTRL * pcmCtrl;
-<<<<<<< HEAD
-=======
-	//
-	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
->>>>>>> parent of dbe01dc... Set new sound on intback
 } sysComPara;
 
 //

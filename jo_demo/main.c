@@ -9,6 +9,7 @@ int framerate;
 short exertSnd;
 short winSnd;
 short stahpSnd;
+short aweSnd;
 //
 
 void	update_gamespeed(void)
@@ -57,17 +58,17 @@ void			my_draw(void)
 	
 	update_gamespeed();
 	
-	jo_printf(0, 5, "P64 PCM Driver Usage Demo");
+	 jo_printf(0, 5, "P64 PCM Driver Usage Demo");
 	jo_printf(0, 8, "Press A to start a semi-protected sound");
 	jo_printf(0, 9, "(will only start this sound type)");
 	jo_printf(0, 10, "(will restart whenever told to play)");
-	jo_printf(0, 12, "(Hold B to start an alt-looping sound.)");
+	jo_printf(0, 12, "(Hold B to start an alt-looping sound.");
 	jo_printf(0, 13, "Release to stop the sound.)");
 	jo_printf(0, 15, "Hold C to repeat a protected sound");
 	jo_printf(0, 16, "(this sound type plays while true)");
 	jo_printf(0, 17, "(and will only restart when done)");
 	
-	jo_printf(0, 18, "Y pans sound from A button");
+	// jo_printf(0, 18, "Y pans sound from A button");
 	
 	if(jo_is_input_key_down(0, JO_KEY_A))
 	{
@@ -85,15 +86,18 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
-	pcm_play(stahpSnd, PCM_PROTECTED, 6, 1);
+	pcm_play(aweSnd, PCM_PROTECTED, 6, 1);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_Y))
 	{
-	pcm_parameter_change(winSnd, 5, PCM_PAN_LEFT);
+	//pcm_parameter_change(winSnd, 5, PCM_PAN_LEFT);
+	
 	} else {
-	pcm_parameter_change(winSnd, 5, PCM_PAN_RIGHT);
+	//pcm_parameter_change(winSnd, 5, PCM_PAN_RIGHT);
 	}
+
+	unsigned int * dummy = (unsigned int *)(SNDRAM);
 
 	//slSynch();
 }
@@ -107,7 +111,9 @@ void			sdrv_vblank_rq(void)
 void			siq(void)
 {
 	jo_printf(3, 25, "(Sound Interrupt Fired!)");	
-	jo_printf(3, 26, "(Intback Snd # %i)", m68k_com->intlast);	
+	jo_printf(3, 26, "(Intback Snd # %i)", m68k_com->intlast);
+	pcm_parameter_change(stahpSnd, 4, 0);
+	m68k_com->intcom = stahpSnd;
 }
 
 void			jo_main(void)
@@ -125,6 +131,7 @@ void			jo_main(void)
 	 winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
 	 exertSnd = load_8bit_pcm((Sint8 *)"EXERT.PCM", 15360);
 	 stahpSnd = load_8bit_pcm((Sint8 *)"STAHP.PCM", 15360);
+	aweSnd = load_8bit_pcm((Sint8 *)"AWSUM.PCM", 15360);
 	 
 
 	SYS_CHGSCUIM(~INT_ST_SND, 0);	 
