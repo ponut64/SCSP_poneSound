@@ -58,21 +58,11 @@ static const int logtbl[] = {
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
 		
 		#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
-//
-unsigned short * sound_cpu_interrupt_enable = (unsigned short *)(SNDRAM + 0x100410 + 14);
-unsigned short * sound_cpu_interrupt_pending = (unsigned short *)(SNDRAM + 0x100410 + 16);
-unsigned short * sound_cpu_interrupt_reset = (unsigned short *)(SNDRAM + 0x100410 + 18);	
-//
-unsigned short * sound_sys_scu_interrupt_enable = (unsigned short *)(SNDRAM + 0x100410 + 26);
-unsigned short * sound_sys_scu_interrupt_pending = (unsigned short *)(SNDRAM + 0x100410 + 28);
-unsigned short * sound_sys_scu_interrupt_reset = (unsigned short *)(SNDRAM + 0x100410 + 30);
 
 	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
-
-
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -152,6 +142,7 @@ void load_drv(void)
 	
 	// Load driver binary from CD and copy it to Sound RAM
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
+
 }
 
 short calculate_bytes_per_blank(int sampleRate, int is8Bit, int isPAL)
@@ -333,20 +324,4 @@ void pcm_cease(short pcmNumber)
 	//If it is a looping sound, the control method is to command it to stop.
 	}
 }
-
-
-/*
-New goal:
-Driver intback sequencing
-
-Step 1: Programmer defines this sound as <intback>
-Step 2: On <interrupt>, SH2 writes new sound # to play at <intlast> (or maybe a new variable, <intcom>)
-Step 3: SH2 slates <cpu interrupt> to 68K
-Step 4: 68K enters routine that immediately begins playback of sound # <intcom> in a non-interfering way
-Step 5e: 68K and SH2 continue outside interrupts as normal
-		68K *skips* the specific sound that was modified at interrupt
-
-*/
-
-
 
