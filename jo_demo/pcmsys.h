@@ -3,6 +3,7 @@
 //
 #ifndef __PCMSYS_H__
 # define __PCMSYS_H__
+
 //////////////////////////////////////////////////////////////////////////////
 
 #define SMPC_REG_IREG(i)        *((volatile unsigned char *)0x20100001+((i) * 2))
@@ -47,7 +48,7 @@
 // 1KB here is reserved for interrupts
 #define SNDPRG (SNDRAM + 0x408)
 //Also the end of sound RAM
-#define PCMEND	(SNDRAM + 0x7F000)
+#define PCMEND	(631767039)
 //////////////////////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////////////////////////////////
@@ -93,10 +94,9 @@ extern unsigned short * master_volume;
 extern short numberPCMs;
 //
 
-void smpc_wait_till_ready(void);
-void smpc_issue_command(unsigned char cmd);
+inline void smpc_wait_till_ready(void);
+inline void smpc_issue_command(unsigned char cmd);
 short	load_16bit_pcm(Sint8 * filename, int sampleRate);
-short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 void	load_drv(void);
 
 void	pcm_play(short pcmNumber, char ctrlType, char volume);

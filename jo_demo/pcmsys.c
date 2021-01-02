@@ -48,8 +48,8 @@ static const int logtbl[] = {
 		
 #define PCM_SET_PITCH_WORD(oct, fns)										\
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
-		
-		#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
+
+#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
 
 	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
@@ -159,9 +159,6 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	
 	if(file_size > (128 * 1024)) return -1; //PCM size too large for general-purpose playback [could still work with timed execution & offets]
 	
-	file_size += ((unsigned int)file_size & 1) ? 1 : 0;
-	file_size += ((unsigned int)file_size & 3) ? 2 : 0;
-	
 	GFS_Load(local_name, 0, (Uint32 *)((unsigned int)scsp_load + SNDRAM), file_size);
 	
 	octr = PCM_CALC_OCT(sampleRate);
@@ -206,12 +203,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	
 	GFS_Close(s_gfs);
 	
-	
 	if(file_size > (64 * 1024)) return -1; //PCM size too large for general-purpose playback [could still work with timed execution & offets]
-	
-
-	file_size += ((unsigned int)file_size & 1) ? 1 : 0;
-	file_size += ((unsigned int)file_size & 3) ? 2 : 0;
 	
 	GFS_Load(local_name, 0, (Uint32 *)((unsigned int)scsp_load + SNDRAM), file_size);
 	
