@@ -1,7 +1,11 @@
 
 #include <jo/jo.h>
+#include "timer.h"
 #include "pcmsys.h"
+#include "input.h"
+#include "pcm_stm.h"
 
+extern Sint8 SynchConst; //SGL System Variable
 int framerate;
 
 //Sound Numbers
@@ -12,15 +16,11 @@ short stahpSnd;
 
 void	update_gamespeed(void)
 {
-	// "fmrt" - a representation of the delta time as some division of vblank periods (1 for 60hz, 2 for 30hz, 3 for 20hz, 4 for 15hz).
-	int frmrt = delta_time>>6;
-	jo_fixed_point_time();
-
-	// "lastTimes" - a list of the last 66 frametimes (relatively vague approximations anyway).
+	int frmrt = dt>>6;
+	timer();
+	
  	static int lastTimes[66];
-	// "time_selector" - the entry into last times being written to.
 	static int time_selector = 0;
-	// "bad_frames" - the # of frames since startup that have been over 40ms. Maybe change that to 17ms for 60hz? 
 	static int bad_frames = 0;
 	
 	lastTimes[time_selector] = frmrt;
@@ -28,11 +28,10 @@ void	update_gamespeed(void)
 	time_selector = (time_selector > 66) ? 0 : time_selector+1;
 	
     framerate = (frmrt)>>4;
-	slPrintFX(delta_time, slLocate(0, 3));
+	jo_printf(0, 3, "(%i) Bad Frames)", bad_frames);
 	
     if (framerate <= 0) framerate=1;
     else if (framerate > 5) framerate=5;
-	//
 
 		//Framegraph
 	char curLine = frmrt;
@@ -67,60 +66,56 @@ void			my_draw(void)
 	jo_printf(0, 16, "(this sound type plays while true)");
 	jo_printf(0, 17, "(and will only restart when done)");
 	
-	if(jo_is_input_key_down(0, JO_KEY_A))
+	if(is_key_struck(DIGI_A))
 	{
 	pcm_play(winSnd, PCM_SEMI, 6);
 	}
 	
-	if(jo_is_input_key_pressed(0, JO_KEY_B))
+	if(is_key_struck(DIGI_B))
 	{
-		jo_printf(0, 21, "(1)");
 	pcm_play(exertSnd, PCM_ALT_LOOP, 6);
-	} else {
-		jo_printf(0, 21, "(0)");
+	} else if(is_key_release(DIGI_B)){
 	pcm_cease(exertSnd);
 	}
 	
-	if(jo_is_input_key_pressed(0, JO_KEY_C))
+	if(is_key_pressed(DIGI_C))
 	{
 	pcm_play(stahpSnd, PCM_PROTECTED, 6);
 	}
 	
-	if(jo_is_input_key_pressed(0, JO_KEY_Y))
-	{
-	pcm_parameter_change(winSnd, 5, PCM_PAN_LEFT);
-	} else {
-	pcm_parameter_change(winSnd, 5, PCM_PAN_RIGHT);
-	}
-	
-	//slSynch();
+	slSynch();
+}
+
+void			run_the_game(void)
+{
+	do{
+	master_file_system(my_draw);
+	}while(1);
 }
 
 void			sdrv_vblank_rq(void)
 {
 	m68k_com->start = 1;
-	m68k_com->dT_ms = delta_time>>6; //The driver currently doesn't need this, but you may as well let it know, yeah?
+	m68k_com->dT_ms = dt>>6;
+	music_vblIn();
+	operate_digital_pad1();
 }
 
 void			jo_main(void)
 {
+	slDynamicFrame(ON); 
+    SynchConst=2;  
 	jo_core_init(JO_COLOR_Black);
 
 	load_drv();
 	
-	/*
-	To convert a sound to 16-bit
-	ffmpeg -i %this%.wav -f s16be -ac 1 -ar (bitrate) %this%.PCM
-	To convert a sound to 8-bit
-	ffmpeg -i %this%.wav -f s8 -ac 1 -ar (bitrate) %this%.PCM
-	*/
 	 winSnd = load_16bit_pcm((Sint8 *)"WIN.PCM", 15360);
 	 exertSnd = load_8bit_pcm((Sint8 *)"EXERT.PCM", 15360);
 	 stahpSnd = load_8bit_pcm((Sint8 *)"STAHP.PCM", 15360);
 	
-	jo_core_add_vblank_callback(sdrv_vblank_rq);
-	jo_core_add_callback(my_draw);
-	jo_core_run();
+	slIntFunction(sdrv_vblank_rq);
+	init_music('L', (Sint8*)"EVE.MUS", 7);
+	run_the_game();
 }
 
 /*
