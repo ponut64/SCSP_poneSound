@@ -55,34 +55,6 @@ void	lead_function(void) //Link start to main
 //Place all includes past this line
 #define PCM_CTRL_MAX (128)
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
-
-
-	
-	/*
-INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
-	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
-		|-------------------------------------------------------------------------------------------------------------------------------|
-SOUND	|		
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-		|	0	|	0	|	0	|	0	|	0	|	1FS	|MIDOUT	|TimerC	|TimerA	|TimerB	|CPU/SCU|	DMA	|MIDIIN	|Extern	|Extern	|Extern	|
-SCU		|
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-	*/
-
-//
-unsigned short * sound_interrupt_enable = (unsigned short *)(0x100410 + 14);
-unsigned short * sound_interrupt_pending = (unsigned short *)(0x100410 + 16);
-unsigned short * sound_interrupt_reset = (unsigned short *)(0x100410 + 18);	
-	
-//
-unsigned short * scu_interrupt_enable = (unsigned short *)(0x100410 + 26);
-unsigned short * scu_interrupt_pending = (unsigned short *)(0x100410 + 28);
-unsigned short * scu_interrupt_reset = (unsigned short *)(0x100410 + 30);
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
 		GLOASSARY OF TERMS:
@@ -159,6 +131,7 @@ typedef struct{
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
 	unsigned char bitDepth; //0 or 1, boolean
+	unsigned char op_type; //0 for raw PCM, 1 for LFO with noise, 2 for LFO no noise, all else illegal
 	unsigned short hiAddrBits; //bits 19-16 of...
 	unsigned short loAddrBits; //Two 16-bit chunks that when combined, form the start address of the sound.
 	unsigned short LSA; //The # of samples forward from the start address to return to after loop.
@@ -167,19 +140,16 @@ typedef struct {
 	unsigned short pitchword; //the OCT & FNS word to use in the ICSR, verbatim.
 	unsigned char pan; //Direct pan setting
 	unsigned char volume; //Direct volume setting
+	unsigned short lfo_data; //LFO (PSG) wave data modulation control register, see SCSP manual p.77 for more info.
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
-	short intback; //If non-zero, will fire sound interrupt on protected sound end and write PCM # to intlast.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
 typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
-	//Alignment warning: Is pointer, must be on 4-byte boundary.
 	_PCM_CTRL * pcmCtrl;
-	//
-	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
 } sysComPara;
 
 //Warning: Do not alter the master volume register from within the 68k program.
@@ -196,6 +166,7 @@ short		loopingPCMs[PCM_CTRL_MAX];
 short		volatilePCMs[PCM_CTRL_MAX];
 int			dataTimers[32];
 
+
 void	driver_data_init(void)
 {
 		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); //I'm so bad at C it took me an hour to realize I had to typecast this
@@ -209,24 +180,9 @@ void	driver_data_init(void)
 	{
 		pcmCtrlData[k].sh2_permit = 0;
 		pcmCtrlData[k].icsr_target = -1;
-		pcmCtrlData[k].intback = 0;
 		loopingPCMs[k] = -1;
 		volatilePCMs[k] = -1;
 	}
-	
-	//Set max master volume (0-15 volume levels valid).
-	unsigned short * master_volume = (unsigned short *)0x100400;
-	*master_volume |= 15;
-	
-/* 	/////////////////////////////////////////////
-	// Required procedure for using SCU interrupt
-	//Reset SCU interrupt
-	*scu_interrupt_reset |= 0x20;
-	//Enable SCU interrupt
-	*scu_interrupt_enable |= 0x20;
-	//Fire SCU interrupt
-	*scu_interrupt_pending |= 0x20;
-	///////////////////////////////////////////// */
 }
 /*
 NOTICE: To play the same sound struct multiple times per frame (why?) you have to copy its PCM_CTRL struct into another array member, and issue it to play.
@@ -246,7 +202,7 @@ void	play_volatile_sound(_PCM_CTRL * lctrl)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 	
-	csr[cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	csr[cst].keys = (1<<11 | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
 	//Key select ON | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
@@ -254,6 +210,8 @@ void	play_volatile_sound(_PCM_CTRL * lctrl)
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
@@ -276,13 +234,15 @@ void	play_protected_sound(short index)
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 
 		
-	csr[cst].keys = (1<<11  | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	csr[cst].keys = (1<<11  | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
 	//Key select ON | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
 	csr[cst].playsize = lctrl->playsize;
 	csr[cst].oct_fns = lctrl->pitchword;
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
@@ -298,25 +258,11 @@ void	play_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
-			
-			if(lctrl->intback != 0)
-			{
-				sh2Com->intlast = index;
-				/////////////////////////////////////////////
-				// Required procedure for using SCU interrupt
-				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
-				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
-				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
-				/////////////////////////////////////////////
-			}
-			
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
 			
+			csr[cst].lfo_data = lctrl->lfo_data;
 			csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
 			csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 		}
@@ -336,7 +282,7 @@ void	play_semi_protected_sound(short index)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 	
-	csr[cst].keys = (1<<11  | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	csr[cst].keys = (1<<11  | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
 	//Key select ON | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
@@ -344,7 +290,9 @@ void	play_semi_protected_sound(short index)
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
-
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
+	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
 	
@@ -360,26 +308,11 @@ void	play_semi_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
-			
-			
-			if(lctrl->intback != 0)
-			{
-				sh2Com->intlast = index;
-				/////////////////////////////////////////////
-				// Required procedure for using SCU interrupt
-				//Reset SCU interrupt
-				*scu_interrupt_reset |= 0x20;
-				//Enable SCU interrupt
-				*scu_interrupt_enable |= 0x20;
-				//Fire SCU interrupt
-				*scu_interrupt_pending |= 0x20;
-				/////////////////////////////////////////////
-			}
-			
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
 			
+			csr[cst].lfo_data = lctrl->lfo_data;
 			csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
 			csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 		}
@@ -399,7 +332,7 @@ void	set_looping_sound(short index)
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 			}
-	csr[cst].keys = (1<<11 | lctrl->loopType << 5 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
+	csr[cst].keys = (1<<11 | lctrl->loopType << 5 | lctrl->op_type << 7 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); 
 	//Key select ON | loop type | LFO use | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
@@ -407,6 +340,8 @@ void	set_looping_sound(short index)
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
+	
+	csr[cst].lfo_data = lctrl->lfo_data;
 	
 	csr[cst].decay_1_2_attack = 31;		//We could skip writing these and specify direct data playback,
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
@@ -560,8 +495,8 @@ void	_start(void)
 		}while(1);
 			sh2Com->start = 0;
 		// Region will run the program once for every time the SH2 commands the driver to start.
-	
 		pcm_control_loop();
+		
 	}
 }
 

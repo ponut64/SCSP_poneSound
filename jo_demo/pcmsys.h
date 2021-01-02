@@ -67,6 +67,7 @@
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
 	unsigned char bitDepth; //0 or 1, boolean
+	unsigned char op_type; //0 for raw PCM, 1 for LFO with noise, 2 for LFO no noise, all else illegal
 	unsigned short hiAddrBits; //bits 19-16 of...
 	unsigned short loAddrBits; //Two 16-bit chunks that when combined, form the start address of the sound.
 	unsigned short LSA; //The # of samples forward from the start address to return to after loop.
@@ -75,19 +76,16 @@ typedef struct {
 	unsigned short pitchword; //the OCT & FNS word to use in the ICSR, verbatim.
 	unsigned char pan; //Direct pan setting
 	unsigned char volume; //Direct volume setting
+	unsigned short lfo_data; //LFO (PSG) wave data modulation control register, see SCSP manual p.77 for more info.
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
-	short intback; //If non-zero, will fire sound interrupt on protected sound end and write PCM # to intlast.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
 typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
-	//Alignment warning: Is pointer, must be on 4-byte boundary.
 	_PCM_CTRL * pcmCtrl;
-	//
-	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
 } sysComPara;
 
 //
@@ -103,7 +101,7 @@ short	load_16bit_pcm(Sint8 * filename, int sampleRate);
 short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 void	load_drv(void);
 
-void	pcm_play(short pcmNumber, char ctrlType, char volume, char interrupt_when_done);
+void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);
 void	pcm_cease(short pcmNumber);
 
