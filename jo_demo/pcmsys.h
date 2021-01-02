@@ -60,8 +60,8 @@
 //////////////////////////////////////////////////////////////////////////////
 #define PCM_SYS_REGION	(0) //0 for NTSC, 1 for PAL
 //////////////////////////////////////////////////////////////////////////////
-#define PCM_PAN_LEFT	(0x1F)	//It is 5-bit data. The MSB being high will reduce the right channel's volume (pan left).
-#define PCM_PAN_RIGHT	(0xF)	//If the MSB is low, it will reduce the left channel's volume (pan right).
+#define PCM_PAN_LEFT	(1<<4)
+#define PCM_PAN_RIGHT	(0)
 //////////////////////////////////////////////////////////////////////////////
 
 typedef struct {
@@ -77,46 +77,14 @@ typedef struct {
 	unsigned char volume; //Direct volume setting
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
-	short intback; //If non-zero, will fire sound interrupt on protected sound end and write PCM # to intlast.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
 typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
-	//Alignment warning: Is pointer, must be on 4-byte boundary.
 	_PCM_CTRL * pcmCtrl;
-	//
-	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
-	short intcom; //Semi-protected playback directive slot; intended to be written to by SH2 after a sound sys interrupt.
 } sysComPara;
-
-	/*
-INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
-	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
-		|-------------------------------------------------------------------------------------------------------------------------------|
-SOUND	|		
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-		|	0	|	0	|	0	|	0	|	0	|	1FS	|MIDOUT	|TimerC	|TimerA	|TimerB	|CPU/SCU|	DMA	|MIDIIN	|Extern	|Extern	|Extern	|
-SCU		|
-ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
-RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
-	*/
-
-
-//
-extern unsigned short * sound_cpu_interrupt_enable;
-extern unsigned short * sound_cpu_interrupt_pending;
-extern unsigned short * sound_cpu_interrupt_reset;
-	
-//
-extern unsigned short * sound_sys_scu_interrupt_enable;
-extern unsigned short * sound_sys_scu_interrupt_pending;
-extern unsigned short * sound_sys_scu_interrupt_reset;
-//
 
 //
 extern	sysComPara * m68k_com;
@@ -125,13 +93,13 @@ extern unsigned short * master_volume;
 extern short numberPCMs;
 //
 
-void	smpc_wait_till_ready(void);
-void	smpc_issue_command(unsigned char cmd);
+void smpc_wait_till_ready(void);
+void smpc_issue_command(unsigned char cmd);
 short	load_16bit_pcm(Sint8 * filename, int sampleRate);
 short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 void	load_drv(void);
 
-void	pcm_play(short pcmNumber, char ctrlType, char volume, char interrupt_when_done);
+void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);
 void	pcm_cease(short pcmNumber);
 
