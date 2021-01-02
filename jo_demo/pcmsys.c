@@ -48,8 +48,13 @@ static const int logtbl[] = {
 		
 #define PCM_SET_PITCH_WORD(oct, fns)										\
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
+<<<<<<< HEAD
 
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
+=======
+		
+		#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
+>>>>>>> parent of dbe01dc... Set new sound on intback
 
 	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
