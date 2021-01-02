@@ -53,6 +53,95 @@ Some operations that handle 4-bytes (void, boolean, int, unsigned int, pointers)
 #define PCM_CTRL_MAX (128)
 #define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
 	
+	/*
+INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
+	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
+		|-------------------------------------------------------------------------------------------------------------------------------|
+SOUND	|		
+ENABLE	|	0	|	0	|	0	|	0	|	0	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|	R/W	|
+PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
+RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+		|	0	|	0	|	0	|	0	|	0	|	1FS	|MIDOUT	|TimerC	|TimerA	|TimerB	|CPU/SCU|	DMA	|MIDIIN	|Extern	|Extern	|Extern	|
+SCU		|
+ENABLE	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+PENDING	|	0	|	0	|	0	|	0	|	0	|	R	|	R	|	R	|	R	|	R	|	R/W	|	R	|	R	|	R	|	R	|	R	|
+RESET	|	0	|	0	|	0	|	0	|	0	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|	W	|
+
+ 	/////////////////////////////////////////////
+	// Required procedure for using SCU interrupt
+	//Reset SCU interrupt
+	*sound_sys_scu_interrupt_reset |= 0x20;
+	//Enable SCU interrupt
+	*sound_sys_scu_interrupt_enable |= 0x20;
+	//Fire SCU interrupt
+	*sound_sys_scu_interrupt_pending |= 0x20;
+	///////////////////////////////////////////// 
+
+	*/
+
+//
+unsigned short * sound_cpu_interrupt_enable = (unsigned short *)(0x100410 + 14);
+unsigned short * sound_cpu_interrupt_pending = (unsigned short *)(0x100410 + 16);
+unsigned short * sound_cpu_interrupt_reset = (unsigned short *)(0x100410 + 18);	
+	
+//
+unsigned short * sound_sys_scu_interrupt_enable = (unsigned short *)(0x100410 + 26);
+unsigned short * sound_sys_scu_interrupt_pending = (unsigned short *)(0x100410 + 28);
+unsigned short * sound_sys_scu_interrupt_reset = (unsigned short *)(0x100410 + 30);
+
+/*
+
+Interrupts TO 68k CPU methodology:
+There are 7 interrupt vectors available, and three registers to configure them.
+On top of that, there are 8 possible interrupts. The 7 interrupts are then arrayed in a "level", from 1-7.
+
+It should be noted that an all zero interrupt level is no vector, so no interrupt occurs.
+
+INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
+	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
+		|-------------------------------------------------------------------------------------------------------------------------------|
+SOUND	|												SCILV0 is bit 0 of the three-bit level code, SCILV1 is bit 1, etc...
+SCILV0	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B0	|	B0	|	B0	|	B0	|	B0	|	B0	|	B0	|
+SCILV1	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B1	|	B1	|	B1	|	B1	|	B1	|	B1	|	B1	|
+SCILV2	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	W	|	B2	|	B2	|	B2	|	B2	|	B2	|	B2	|	B2	|
+		|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	-	|	*	|TimerA	|	CPU	|	DMA	|MIDIN	|Extern	|Extern	|Extern	|
+																	* = Timer B, Timer C, MIDI-OUT, 1-sample int
+																	
+The next step of the interrupts to sound CPU is knowing which 
+interrupt vector in the table corresponds to which level of interrupt.
+vecTable[25] = Level 1
+vecTable[26] = Level 2
+vecTable[27] = Level 3
+vecTable[28] = Level 4
+vecTable[29] = Level 5
+vecTable[30] = Level 6
+vecTable[31] = Level 7
+
+To use a software interrupt (via SH2), first write 0x20 to (let's say..) SCILV0 (sound_cpu_interrupt_level_table_0).
+Then, from SH2, write 0x20 to sound_cpu_interrupt_reset.
+Then write the same to sound_cpu_interrupt_enable.
+Then write the same to sound_cpu_interrupt_pending.
+At that point, the 68k will recieve the interrupt, and the PC will jump to the address at vecTable[25], in this case.
+
+IMPORTANT: Modifying the interrupt vector table while 68k is powered on is a big no-no and will cause it to crash.
+
+ 	/////////////////////////////////////////////
+	// Required procedure for sending interrupt to 68k
+	//Reset 68k CPU interrupt
+	*sound_cpu_interrupt_reset |= 0x20;
+	//Enable 68k CPU interrupt
+	*sound_cpu_interrupt_enable |= 0x20;
+	//Fire 68k CPU interrupt
+	*sound_cpu_interrupt_pending |= 0x20;
+	///////////////////////////////////////////// 
+
+*/
+
+unsigned short * sound_cpu_interrupt_level_table_0 = (unsigned short *)(0x100410 + 20);
+unsigned short * sound_cpu_interrupt_level_table_1 = (unsigned short *)(0x100410 + 22);
+unsigned short * sound_cpu_interrupt_level_table_2 = (unsigned short *)(0x100410 + 24);	
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
 		GLOASSARY OF TERMS:
@@ -139,13 +228,18 @@ typedef struct {
 	unsigned char volume; //Direct volume setting
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
+	short intback; //If non-zero, will fire sound interrupt on protected sound end and write PCM # to intlast.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
 typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
+	//Alignment warning: Is pointer, must be on 4-byte boundary.
 	_PCM_CTRL * pcmCtrl;
+	//
+	unsigned short intlast; //Will recieve the PCM # of the sound which last fired an interrupt
+	short intcom; //Semi-protected playback directive slot; intended to be written to by SH2 after a sound sys interrupt.
 } sysComPara;
 
 //Warning: Do not alter the master volume register from within the 68k program.
@@ -166,6 +260,7 @@ void	driver_data_init(void)
 {
 		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); //I'm so bad at C it took me an hour to realize I had to typecast this
 			//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
+		sh2Com->intcom = -1;
 	for(char i = 0; i < 32; i++)
 	{
 		ICSR_Busy[i] = -1;
@@ -175,6 +270,7 @@ void	driver_data_init(void)
 	{
 		pcmCtrlData[k].sh2_permit = 0;
 		pcmCtrlData[k].icsr_target = -1;
+		pcmCtrlData[k].intback = 0;
 		loopingPCMs[k] = -1;
 		volatilePCMs[k] = -1;
 	}
@@ -255,6 +351,21 @@ void	play_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
+			
+			if(lctrl->intback != 0)
+			{
+				sh2Com->intlast = index;
+				/////////////////////////////////////////////
+				// Required procedure for using SCU interrupt
+				//Reset SCU interrupt
+				*sound_sys_scu_interrupt_reset |= 0x20;
+				//Enable SCU interrupt
+				*sound_sys_scu_interrupt_enable |= 0x20;
+				//Fire SCU interrupt
+				*sound_sys_scu_interrupt_pending |= 0x20;
+				/////////////////////////////////////////////
+			}
+			
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -302,6 +413,22 @@ void	play_semi_protected_sound(short index)
 			lctrl->icsr_target = -1;
 			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
 			dataTimers[cst] = 0; //Clear playback timer
+			
+			
+			if(lctrl->intback != 0)
+			{
+				sh2Com->intlast = index;
+				/////////////////////////////////////////////
+				// Required procedure for using SCU interrupt
+				//Reset SCU interrupt
+				*sound_sys_scu_interrupt_reset |= 0x20;
+				//Enable SCU interrupt
+				*sound_sys_scu_interrupt_enable |= 0x20;
+				//Fire SCU interrupt
+				*sound_sys_scu_interrupt_pending |= 0x20;
+				/////////////////////////////////////////////
+			}
+			
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -473,6 +600,32 @@ void	pcm_control_loop(void)
 			icsr_index++;
 		}
 	}
+	
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//	Immediate playback directive of sound # via INTCOM slot, INTCOM slot is always played as semi-protected.
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	if(sh2Com->intcom >= 0)
+	{
+	lctrl = &pcmCtrlData[sh2Com->intcom];
+	lctrl->sh2_permit = 1;
+	lctrl->loopType = -2;
+		if(lctrl->icsr_target == -1)
+		{
+			while(ICSR_Busy[icsr_index] != -1)
+			{
+				icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
+			}
+			if(icsr_index < 32)
+			{
+				lctrl->icsr_target = icsr_index;
+				play_semi_protected_sound(sh2Com->intcom);
+			}
+		} else {
+			play_semi_protected_sound(sh2Com->intcom);
+		}
+	}
+	//Clear INTCOM slot
+	sh2Com->intcom = -1;
 }
 
 void	_start(void)
