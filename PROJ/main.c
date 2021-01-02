@@ -61,7 +61,7 @@ void	lead_function(void) //Link start to main
 			KX : EXECUTE KEY [select] [Start or stop the sound] [Reset to 0 by system]
 			KB : Key ON or Key OFF select [0 is OFF, 1 is ON]
 			SBCTL : Source bit control [???]
-			SSCTL : Source type control [0: PCM, 1: Internal noise generator (LFO/FM) NOISE, 2: Internal noise generator (LFO/FM) NO NOISE, 3: Illegal] 
+			SSCTL : Source type control [0: PCM, 1: PCM + LFO (Noise allowed), 2: PCM + LFO (Noise disallowed), 3: Illegal] 
 			LPCTL : loop control [0: Sound ends when LEA is reached, 1: normal loop, 2: reverse loop, 3: alternating loop]
 					It is important to note that looping commands still need continuous KEY_ON setting?
 			8B : PCM 8-bit wave data boolean [1: 8 bit 0: 16 bit]
