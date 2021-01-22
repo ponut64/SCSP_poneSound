@@ -53,14 +53,21 @@ void	lead_function(void) //Link start to main
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Place all includes past this line
-#define PCM_CTRL_MAX (128)
-#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
+#define PCM_CTRL_MAX	(64)
+#define DRV_SYS_END		(5 * 1024) //System defined safe end of driver's address space
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#define	PCM_ALT_LOOP	(3)
+#define PCM_RVS_LOOP	(2)
+#define PCM_FWD_LOOP	(1)
+#define PCM_VOLATILE	(0)
+#define PCM_PROTECTED	(-1)
+#define PCM_SEMI		(-2)
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*		
 		GLOASSARY OF TERMS:
 			KX : EXECUTE KEY [select] [Start or stop the sound] [Reset to 0 by system]
 			KB : Key ON or Key OFF select [0 is OFF, 1 is ON]
-			SBCTL : Source bit control [???]
+			SBCTL : Source bit control - Boolean for whether data is signed or unsigned
 			SSCTL : Source type control [0: PCM, 1: Noise Generator, 2: Waveform generator, 3: Illegal] - Pertains to LFO registers in 1&2
 			LPCTL : loop control [0: Sound ends when LEA is reached, 1: normal loop, 2: reverse loop, 3: alternating loop]
 					It is important to note that looping commands still need continuous KEY_ON setting?
@@ -75,7 +82,7 @@ void	lead_function(void) //Link start to main
 			TL : Total level [Bitwise data struct which may attenuate or divide the waveform of the input]
 			...
 			...
-			RE : LFO Reset [???] - lFO pertains to the sound generator, both FM and waveform [not PCM though]
+			RE : 	LFO Reset - Low frequency oscillator reset switch
 			PLF.. : LFO frequency modulation wave form select [OWS] or select [S] [PITCH] [???]
 			ALF.. : LFO amplitude modulation wave form select [OWS] or select [A] [AMP]	[???]
 			...
@@ -143,12 +150,11 @@ typedef struct {
 
 typedef struct{
 	unsigned short start; //System Start Boolean
-	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
+	unsigned short debug_state; //A region which the driver will write information about its state.
 	_PCM_CTRL * pcmCtrl;
 } sysComPara;
 
 //Warning: Do not alter the master volume register from within the 68k program.
-//It's legal, but dangerous.
 volatile sysComPara * sh2Com = (volatile sysComPara  *)(ADDR_PRG + DRV_SYS_END);
 volatile _ICSR * csr = (volatile _ICSR *)0x100000; //There are 32 of these.
 //
@@ -161,11 +167,14 @@ short		loopingPCMs[PCM_CTRL_MAX];
 short		volatilePCMs[PCM_CTRL_MAX];
 int			dataTimers[32];
 
-
 void	driver_data_init(void)
 {
-		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); //I'm so bad at C it took me an hour to realize I had to typecast this
-															//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
+	//I'm so bad at C it took me an hour to realize I had to typecast this
+	//Assignment is for the SH2, so it adds the SNDRAM base uncached address.
+		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); 
+	//Set "start" to a specific number during start up to communicate the driver is initailizing.
+		sh2Com->start = 0xFFFF; 
+		sh2Com->debug_state = ('I' | ('N'<<8));
 	for(char i = 0; i < 32; i++)
 	{
 		ICSR_Busy[i] = -1;
@@ -178,10 +187,22 @@ void	driver_data_init(void)
 		loopingPCMs[k] = -1;
 		volatilePCMs[k] = -1;
 	}
+	sh2Com->start = 0x7777; 
 }
 /*
-NOTICE: To play the same sound struct multiple times per frame (why?) you have to copy its PCM_CTRL struct into another array member, and issue it to play.
+NOTICE: To play the same sound struct multiple times per frame you have to copy its PCM_CTRL
+struct into another array member, and issue it to play.
 */
+
+void	driver_end_sound(short * cst, _PCM_CTRL * lctrl)
+{
+	csr[*cst].keys = (0); //Key select OFF
+	csr[*cst].keys |= 1<<12; //Key EXECUTE OFF
+	lctrl->sh2_permit = 0; 
+	lctrl->icsr_target = -1;
+	ICSR_Busy[*cst] = -1; //Flag this ICSR as no longer busy
+	dataTimers[*cst] = 0; //Clear playback timer
+}
 
 /*
 This function is for non-looping sounds that will restart every time the driver detects sh2 permit. In other words, it is "volatile".
@@ -193,7 +214,7 @@ Bonus: You could attach volatile playback to an sh2 function to *know* if its ha
 void	play_volatile_sound(_PCM_CTRL * lctrl)
 {
 
-	char cst = lctrl->icsr_target;
+	short cst = lctrl->icsr_target;
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 	
@@ -219,8 +240,9 @@ This function is for playing non-looping sounds that will only restart once thei
 void	play_protected_sound(short index)
 {
 	_PCM_CTRL * lctrl = &pcmCtrlData[index];
-	char cst = lctrl->icsr_target;
-		if(ICSR_Busy[cst] != index){ //This ICSR is not presently associated with the protected sound, so we set it up.
+	short cst = lctrl->icsr_target;
+//This ICSR is not presently associated with the protected sound, so we set it up.
+		if(ICSR_Busy[cst] != index){
 	dataTimers[cst] = 0; //Clear playback timer
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
@@ -237,19 +259,15 @@ void	play_protected_sound(short index)
 	csr[cst].key_decay_release = 31;	//but as far as I understand, this removes sound panning. Attenuation, bit 9 [SD].
 	
 	csr[cst].keys |= 1<<12; //KEY EXECUTE must be written last.
-									} else {
-	csr[cst].oct_fns = lctrl->pitchword;							//Allow live volume and pitch adjustment of protected sounds
+		} else {
+	//Allow live volume and pitch adjustment of semi protected soundssounds
+	csr[cst].oct_fns = lctrl->pitchword;							
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
-									}
+		}
 	
 		if(dataTimers[cst] >= (lctrl->playsize<<(1 - lctrl->bitDepth)) ) //1 - bitDepth is an expression that will or will not multiply the playsize by 2,
 		{																//depending on if it is 8 bits per sample or 16 bits per sample. Remember,
-			csr[cst].keys = (0); //Key select OFF						//if the bits per sample is 16, the playsize >>=1 its data size.
-			csr[cst].keys |= 1<<12; //Key EXECUTE OFF
-			lctrl->sh2_permit = 0; //The SH2 has commanded a protected sound, and this signals that the protection period is over.	
-			lctrl->icsr_target = -1;
-			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
-			dataTimers[cst] = 0; //Clear playback timer
+			driver_end_sound(&cst, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -263,7 +281,7 @@ void	play_semi_protected_sound(short index)
 {
 	
 	_PCM_CTRL * lctrl = &pcmCtrlData[index];
-	char cst = lctrl->icsr_target;
+	short cst = lctrl->icsr_target;
 		if(lctrl->sh2_permit == 1)
 		{
 	dataTimers[cst] = 0; //Clear playback timer
@@ -283,16 +301,15 @@ void	play_semi_protected_sound(short index)
 	
 	csr[cst].keys |= 1<<12; //KEY EXECUTE must be written last.
 	lctrl->sh2_permit = 0; //Unhinge control struct
+		} else {
+	//Allow live volume and pitch adjustment of semi protected soundssounds
+	csr[cst].oct_fns = lctrl->pitchword;							
+	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));	//
 		}
 		
 		if(dataTimers[cst] >= (lctrl->playsize<<(1 - lctrl->bitDepth)) ) //1 - bitDepth is an expression that will or will not multiply the playsize by 2,
 		{																//depending on if it is 8 bits per sample or 16 bits per sample. Remember,
-			csr[cst].keys = (0); //Key select OFF						//if the bits per sample is 16, the playsize >>=1 its data size.
-			csr[cst].keys |= 1<<12; //Key EXECUTE OFF
-			lctrl->sh2_permit = 0; //The SH2 has commanded a protected sound, and this signals that the protection period is over.	
-			lctrl->icsr_target = -1;
-			ICSR_Busy[cst] = -1; //Flag this ICSR as no longer busy
-			dataTimers[cst] = 0; //Clear playback timer
+			driver_end_sound(&cst, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -307,12 +324,13 @@ This function is for setting up or updating a sound with looping playback
 void	set_looping_sound(short index)
 {
 	_PCM_CTRL * lctrl = &pcmCtrlData[index];
-	char cst = lctrl->icsr_target;
-
-		if(ICSR_Busy[cst] != index){ //This ICSR is not presently associated with the looping sound, so we decimate its current playback.
+	short cst = lctrl->icsr_target;
+	//This ICSR is not presently associated with the looping sound, so we decimate its current playback.
+		if(ICSR_Busy[cst] != index){ 
 	csr[cst].keys = (0); //Key select OFF
 	csr[cst].keys |= 1<<12; //Key EXECUTE OFF
 			}
+	//Then, set up the sound.
 	csr[cst].keys = (1<<11 | lctrl->loopType<<5 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | loop type | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
@@ -341,11 +359,11 @@ void	pcm_control_loop(void)
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
 		lctrl = &pcmCtrlData[k];
-		if(lctrl->loopType == 0)
+		if(lctrl->loopType == PCM_VOLATILE)
 		{
 			volatilePCMs[volatileIndex] = k;
 			volatileIndex++;
-		} else if(lctrl->loopType != 0)
+		} else if(lctrl->loopType != PCM_VOLATILE)
 		{
 			loopingPCMs[loopingIndex] = k;
 			loopingIndex++;
@@ -393,7 +411,7 @@ void	pcm_control_loop(void)
 		//	In this case, the SH2 is never to write 0 to SH2 Permit to stop a protected sound.
 		//	To prematurely stop a protected sound, set its volume to zero and let the timer conclude.
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		} else if(lctrl->loopType == -1  && lctrl->sh2_permit == 1)//If normal protected sound, if permitted...
+		} else if(lctrl->loopType == PCM_PROTECTED  && lctrl->sh2_permit == 1)//If normal protected sound, if permitted...
 		{
 			if(lctrl->icsr_target == -1)	//If first run (no current ICSR)
 			{
@@ -417,7 +435,7 @@ void	pcm_control_loop(void)
 		//	Because of this, writing SH2 Permit to 0 on a semi-protected sound results in undefined behaviour.
 		//	To stop a semi-protected sound, change the volume to 0 and let the timer conclude.
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		} else if(lctrl->loopType == -2) //If semi-protected sound...
+		} else if(lctrl->loopType == PCM_SEMI) //If semi-protected sound...
 		{
 			if(lctrl->icsr_target == -1 && lctrl->sh2_permit == 1) //Sound does not currently occupy an ICSR
 			{
@@ -435,7 +453,6 @@ void	pcm_control_loop(void)
 			{
 				play_semi_protected_sound(loopingPCMs[l]); //Update
 			}
-			
 		}
 	}
 	
@@ -463,18 +480,22 @@ void	pcm_control_loop(void)
 
 }
 
+
 void	_start(void)
 {
 	driver_data_init();
 	while(1){
 		//
 		do{
-			if(sh2Com->start != 0) break;
+			sh2Com->debug_state = ('W' | ('A'<<8));
+			if(sh2Com->start == 1) break;
 		}while(1);
 			sh2Com->start = 0;
 		// Region will run the program once for every time the SH2 commands the driver to start.
+		sh2Com->debug_state = ('S' | ('T'<<8));
 		pcm_control_loop();
 		
 	}
+
 }
 

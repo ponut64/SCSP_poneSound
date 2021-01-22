@@ -62,7 +62,6 @@ void			my_draw(void)
 void			sdrv_vblank_rq(void)
 {
 	m68k_com->start = 1;
-	m68k_com->dT_ms = delta_time>>6; //The driver currently doesn't need this, but you may as well let it know, yeah?
 }
 
 void			jo_main(void)

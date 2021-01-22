@@ -6,7 +6,7 @@
 #include "pcmsys.h"
 
 
-static const int logtbl[] = {
+const static int logtbl[] = {
 /* 0 */		0, 
 /* 1 */		1, 
 /* 2 */		2, 2, 
@@ -49,16 +49,20 @@ static const int logtbl[] = {
 #define PCM_SET_PITCH_WORD(oct, fns)										\
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
 		
-		#define DRV_SYS_END (10 * 1024) //System defined safe end of driver's address space
-
 	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
-
+ 
+//////////////////
+// so what am i doing next, what do i need to do?
+// i need to make a function to load an adx file, read its header, write the associated data from header
+// to the pcm ctrl struct then copy only the sample data to sound ram
+// and set the playsize of the pcm ctrl to the # of adx frames, not the actual # of samples
+// and also set the correct flags for the driver to know to handle it as an adx
 //////////////////////////////////////////////////////////////////////////////
 
-void smpc_wait_till_ready (void)
+inline void smpc_wait_till_ready (void)
 {
    // Wait until SF register is cleared
    while(SMPC_REG_SF & 0x1) { }
@@ -66,7 +70,7 @@ void smpc_wait_till_ready (void)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void smpc_issue_command(unsigned char cmd)
+inline void smpc_issue_command(unsigned char cmd)
 {
    // Set SF register so that no other command can be issued.
    SMPC_REG_SF = 1;
@@ -124,7 +128,7 @@ void			load_drv(void)
 	
 	// Copy driver over
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
-
+	m68k_com->start = 0xFFFF;
 }
 
 short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL)

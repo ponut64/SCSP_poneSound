@@ -49,7 +49,8 @@
 //Also the end of sound RAM
 #define PCMEND	(SNDRAM + 0x7F000)
 //////////////////////////////////////////////////////////////////////////////
-
+#define DRV_SYS_END (5 * 1024) //System defined safe end of driver's address space
+#define PCM_CTRL_MAX (64)
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
 #define PCM_RVS_LOOP	(2)
@@ -82,7 +83,7 @@ typedef struct {
 
 typedef struct{
 	unsigned short start; //System Start Boolean
-	unsigned short dT_ms; //delta time supplied by SH2 in miliseconds 
+	unsigned short debug_state; //A region which the driver will write information about its state.
 	_PCM_CTRL * pcmCtrl;
 } sysComPara;
 
@@ -97,6 +98,7 @@ void smpc_wait_till_ready(void);
 void smpc_issue_command(unsigned char cmd);
 short	load_16bit_pcm(Sint8 * filename, int sampleRate);
 short	load_8bit_pcm(Sint8 * filename, int sampleRate);
+short	load_adx(Sint8 * filename);
 void	load_drv(void);
 
 void	pcm_play(short pcmNumber, char ctrlType, char volume);
