@@ -49,7 +49,7 @@
 //Also the end of sound RAM
 #define PCMEND	(SNDRAM + 0x7F000)
 //////////////////////////////////////////////////////////////////////////////
-#define DRV_SYS_END (5 * 1024) //System defined safe end of driver's address space
+#define DRV_SYS_END (45 * 1024) //System defined safe end of driver's address space
 #define PCM_CTRL_MAX (64)
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
@@ -59,11 +59,31 @@
 #define PCM_PROTECTED	(-1)
 #define PCM_SEMI		(-2)
 //////////////////////////////////////////////////////////////////////////////
+#define PCM_TYPE_ADX (2) // 4-bit (compressed audio)
+#define PCM_TYPE_8BIT (1) // 8-bit
+#define PCM_TYPE_16BIT (0) // 16-bit
+//////////////////////////////////////////////////////////////////////////////
 #define PCM_SYS_REGION	(0) //0 for NTSC, 1 for PAL
 //////////////////////////////////////////////////////////////////////////////
 #define PCM_PAN_LEFT	(1<<4)
 #define PCM_PAN_RIGHT	(0)
 //////////////////////////////////////////////////////////////////////////////
+#define ADX_MASTER_768 (0)
+#define ADX_MASTER_1152 (1)
+#define ADX_MASTER_1536 (2)
+#define ADX_MASTER_2304 (3)
+/* 7.68 Data */
+#define ADX_768_COEF_1 (4401)
+#define ADX_768_COEF_2 (-1183)
+/* 11.52 data */
+#define ADX_1152_COEF_1 (5386)
+#define ADX_1152_COEF_2 (-1771)
+/* 15.36 data */
+#define ADX_1536_COEF_1 (5972)
+#define ADX_1536_COEF_2 (-2187)
+/* 23.04 data */
+#define ADX_2304_COEF_1 (6631)
+#define ADX_2304_COEF_2 (-2685)
 
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
@@ -77,6 +97,7 @@ typedef struct {
 	unsigned char pan; //Direct pan setting
 	unsigned char volume; //Direct volume setting
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
+	unsigned short decompression_size; //Size of the buffer used for an ADX sound effect. Specifically sized by Master SH2.
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
@@ -84,8 +105,24 @@ typedef struct {
 typedef struct{
 	unsigned short start; //System Start Boolean
 	unsigned short debug_state; //A region which the driver will write information about its state.
+	short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
+	short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	_PCM_CTRL * pcmCtrl;
 } sysComPara;
+
+typedef struct {
+	unsigned short one_half; //[this is 32768 or 0x8000]
+	short offset2data;
+	unsigned char format; //[this is 3]
+	unsigned char block_size; //[this is 18]
+	unsigned char bit_depth; //[this is 4]
+	unsigned char channels; //[this should be 1]
+	unsigned int sample_rate;
+	unsigned int sample_ct;
+	unsigned short hp_cutoff; //[this should be 500]
+	unsigned char loop;
+	unsigned char illegal; //[boolean, 0 for false, 1 for true]
+} adx_header;
 
 //
 extern	sysComPara * m68k_com;
@@ -99,7 +136,7 @@ void smpc_issue_command(unsigned char cmd);
 short	load_16bit_pcm(Sint8 * filename, int sampleRate);
 short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 short	load_adx(Sint8 * filename);
-void	load_drv(void);
+void	load_drv(int master_adx_frequency);
 
 void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);

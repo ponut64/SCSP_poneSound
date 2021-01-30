@@ -1,0 +1,249 @@
+ResComp 2.71 (april 2020)
+Copyright Stephane Dallongeville
+https://github.com/Stephane-D/SGDK
+
+ResComp is part of SGDK (aka Sega Genesis Dev Kit) so refer to SGDK licence if needed.
+
+It allows to compile different type of resource and output them in assembly source form (GAS format).
+
+Usage: rescomp resource.res [out.s] [-noheader]
+
+If output file is not specified it takes the same name as input with .s extension.
+Note that the header file (.h) is generated except if you use the -noheader parameter.
+
+Supported resource type:
+- BITMAP    bitmapped image type resource, used for the Bitmap SGDK engine (do not use it as tile resource).
+- PALETTE   palette type resource, used as color input for Bitmap, Image or Sprite resource.
+- TILESET   tileset type resource, contains tiles data which are used by Image or Sprite resource.
+- MAP       map type resource.
+- IMAGE     image type resource, internally contains Palette, Tileset and Map data and can be used to draw a complete background.
+- SPRITE    sprite type resource, used to handle sprites with the SGDK Sprite engine.
+- XGM       XGM music type resource (.vgm or .xgm file), used to play music.
+- WAV       WAV sound type resource (.wav file), used to play sample sound data.
+- BIN       any binary data file which do not need any specific conversion or processing.
+
+Supported function:
+- ALIGN     align *binary* data for the whole resource file using
+- UNGROUP   by default rescomp will group data export by type, using UNGROUP allow to disable that feature.
+
+
+PALETTE
+-------
+Take a .pal file or an image as input and transform it in SGDK Palette structure.
+If the input image is 1 pixel heigth then the width is the palette size and pixel X represent color data at index X.
+In others cases the usual image palette data is used instead.
+
+Palette is used as color input for Bitmap, Image and Sprite resources.
+
+Syntax:
+PALETTE name file
+
+    name            name of the output Bitmap structure
+    file            path of the input image file (should be 8bpp .bmp or .png) or .pal file
+
+
+BITMAP
+------
+Take an image as input and transform it in SGDK Bitmap structure.
+Bitmap image structure is used for the SGDK BMP (bitmap) engine, do not use it for tiled image.
+
+Syntax:
+BITMAP name img_file [compression]
+
+    name            name of the output Bitmap structure
+    img_file        path of the input image file (should be 8bpp .bmp or .png)
+    compression     compression type (use unpackBitmap(..) to unpack), accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression (default)
+                        1 / APLIB       = aplib library (good compression ratio but slow)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast)
+
+
+TILESET
+-------
+Take an image as input and transform it in SGDK TileSet structure.
+TileSet is used as tiles source for Image and Sprite.
+
+Syntax:
+TILESET name img_file [compression]
+
+    name            name of the output TileSet structure
+    img_file        path of the input image file (should be 8bpp .bmp or .png)
+    compression     compression type (use unpackTileSet(..) to unpack), accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression (default)
+                        1 / APLIB       = aplib library (good compression ratio but slow)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast)
+
+
+MAP
+---
+NOT YET SUPPORTED !
+Take an map file as input and transform it in SGDK Map structure.
+Map is used to define a complete background (plane) data.
+
+Syntax:
+MAP name map_file width height [compression]
+
+    name            name of the output Map structure
+    map_file        path of the input map file (not yet defined, mappy ?)
+    width           width of the map in tile
+    heigth          heigth of the map in tile
+    compression     compression type (use unpackMap(..) to unpack), accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression
+                        1 / APLIB       = aplib library (good compression ratio but slow)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast)
+
+
+IMAGE
+-----
+Take an image as input and transform it in SGDK Image structure.
+Image is used to directly draw image in background plan, it internally contains a Palette, TileSet and Map structure.
+
+Syntax:
+IMAGE name img_file [compression [mapopt [mapbase]]]
+
+    name            name of the output Image structure
+    img_file        path of the input image file (should be 8bpp .bmp or .png)
+    compression     compression type (use unpackImage(..) to unpack), accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression
+                        1 / APLIB       = aplib library (good compression ratio but slow)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast)
+    mapopt          define the map optimisation level
+                        0 / NONE        = no optimisation (each tile is unique)
+                        1 / ALL         = find duplicate and flipped tile (default)
+                        2 / DUPLICATE   = find duplicate tile only
+    mapbase         define the base tilemap value, useful to set a default priority, palette and base tile index offset.
+                    Using a base tile index offset (static tile allocation) allow to use the faster VDP_xxxTileMapxxx(..) functions.
+
+
+SPRITE
+------
+Take an image as input and transform it in SGDK SpriteDefinition structure.
+SpriteDefinition is used to draw, animate and manage sprites, it internally contains severals TileSet, Palette and Animation structures.
+
+Syntax:
+SPRITE name img_file width heigth [compression [time [collision [opt [iteration]]]]]
+
+    name            name of the output SpriteDefinition structure
+    img_file        path of the input image file (should be 8bpp .bmp or .png)
+    width           width of a single sprite frame in tile (width * heigth <= 256)
+    heigth          heigth of a single sprite frame in tile (width * heigth <= 256)
+    compression     compression type, accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression
+                        1 / APLIB       = aplib library (good compression ratio but slow, don't use it for streamed sprite)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast, recommended for streamed sprite)
+    time            display frame time in 1/60 of second (time between each animation frame)
+                       If this value is set to 0 (default) then auto animation is disabled
+    collision       collision type: CIRCLE, BOX or NONE (NONE by default)
+    opt             sprite cutting optimization strategy, accepted values:
+                        0 / BALANCED  = balance between used tiles and hardware sprites (default)
+                        1 / SPRITE    = reduce the number of hardware sprite (using bigger sprite) at the expense of more used tiles
+                        2 / TILE      = reduce the number of tiles at the expense of more hardware sprite (using smaller sprite)
+    iteration       number of iteration for sprite cutting optimization (default = 500000)
+
+Some informations about how SpriteDefinition is generated from the input image:
+- input image dimension is aligned on tile (multiple of 8).
+- input image is a grid where each cell represents a single sprite frame and where a row define a complete sprite animation.
+- cell size (frame size) = width * height (in tile) where width and height should be <= 16 (maximum = 128 pixels for both width and height)
+- a frame can be composed of several internal VDP sprites but it stricly limited to a maximum of 16 sprites.
+  If the sprite is too large to fit in 16 hardware sprites (rescomp will complain about it), then you may reduce its size or split it in 2.
+- rescomp detects flipped frame to avoid redundant sprite tiles.
+- rescomp detects empty frame at end of animation row to not store empty frame data.
+- rescomp try to optimize hardware sprites and vRAM usage by detecting empty areas in sprite frames.
+- rescomp detects frame copy inside an animation to generate the according animation sequence.
+- by default collision bounds are calculated by using 75% of the original sprite frame.
+
+
+XGM
+---
+Take a .vgm or .xgm music file as input and transform it in binary format usable with the SGDK SND_startPlay_XGM(..) methods.
+The XGM driver supports music play along 4 PCM channels mixing (100% running on Z80 cpu).
+
+Syntax:
+XGM name file [timing [options]]
+
+    name            XGM music variable name
+    file            path of the .vgm or .xgm music file to convert to binary data array
+    timing          define the XGM base timing
+                       -1 (default) = AUTO (NTSC or PAL depending the information in source VGM/XGM file)
+                        0           = NTSC (XGM is generated for NTSC system)
+                        1           = PAL (XGM is generated for PAL system)
+    options         optional(s) parameter(s) for xgmtool
+                        ex: "-dr -di" to disable some sample auto process (see xgmtool to get more info)
+
+
+WAV
+---
+Take a .wav sound file as input and transform it to in binary format usable with one of the SGDK PCM driver.
+
+Syntax:
+WAV name wav_file [driver [outrate]]
+
+    name            variable name
+    file            path of the .wav file (will be automatically converted to 8 bits signed PCM at needed rate)
+    driver          specify the Z80 driver to use:
+                        0 / PCM (default)
+                            Single channel 8 bits signed sample driver.
+                            It can play a sample (8 bit signed) from 8 Khz up to 32 Khz rate.
+                            Method to use: SND_startPlay_PCM(..)
+                        1 / 2ADPCM
+                            2 channels 4 bits ADPCM sample driver.
+                            It can mix up to 2 ADCPM samples at a fixed 22050 Hz rate.
+                            Method to use: SND_startPlay_2ADPCM(..)
+                        2 / 3 / 4PCM
+                            4 channels 8 bits signed sample driver with volume support.
+                            It can mix up to 4 samples (8 bit signed) at a fixed 16 Khz rate.
+                            with volume support (16 levels du to memory limitation).
+                            Method to use: SND_startPlay_4PCM_ENV(..)
+                        4 / 5 / XGM
+                            XGM music with 4 channels 8 bits samples driver.
+                            It supports 4 PCM SFX at a fixed 14 Khz rate while playing XGM music.
+                            Methods to use: SND_setPCM_XGM(..) and SND_startPlayPCM_XGM(..)
+    outrate         output PCM rate (only used for Z80_DRIVER_PCM driver)
+                        By default the default WAV output rate is used.
+
+
+BIN
+---
+Take any data file as input and transform it in binary data array accessible through SGDK.
+
+Syntax:
+BIN name file [align [salign [fill [compression [far]]]]]
+
+    name            BIN data variable name
+    file            path of the data file to convert to binary data array
+    align           memory address alignment for generated data array (default is 2)
+    salign          size alignment for the generated data array (default is 2)
+    fill            fill value for the size alignment (default is 0)
+    compression     compression type, accepted values:
+                       -1 / BEST / AUTO = use best compression
+                        0 / NONE        = no compression
+                        1 / APLIB       = aplib library (good compression ratio but slow)
+                        2 / FAST / LZ4W = custom lz4 compression (average compression ratio but fast)
+    far             'far' binary data flag to put it at the end of the ROM (useful for bank switch, default = TRUE)
+
+
+ALIGN
+-----
+Align *binary* data for the *whole* resource file so you can have only ALIGN directive per resource (.res) file.
+ALIGN function is useful when using bank switch for ROM larger than 4MB, it allows to avoid having a block of data crossing 2 data banks.
+If you need several data alignments then you have to use several resources files.
+Note that if you omit [value] parameter by default data is aligned on 512KB as this is the bank size when using bank switch mechanism.
+
+Syntax:
+ALIGN [value]
+
+    value           specifies the minimum binary data alignment in bytes (default is 524288 = bank size)
+
+
+UNGROUP
+-------
+By default rescomp will group data export by type of data, this generally allow better LZ4W compression.
+Using UNGROUP function allow to disable that feature, that might be useful to help in bank data separation when using the bank switch mechanism.
+
+Syntax:
+UNGROUP

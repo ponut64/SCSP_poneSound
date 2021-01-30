@@ -6,7 +6,7 @@
 #include "pcmsys.h"
 
 
-const static int logtbl[] = {
+static const int logtbl[] = {
 /* 0 */		0, 
 /* 1 */		1, 
 /* 2 */		2, 2, 
@@ -54,15 +54,7 @@ const static int logtbl[] = {
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
  
-//////////////////
-// so what am i doing next, what do i need to do?
-// i need to make a function to load an adx file, read its header, write the associated data from header
-// to the pcm ctrl struct then copy only the sample data to sound ram
-// and set the playsize of the pcm ctrl to the # of adx frames, not the actual # of samples
-// and also set the correct flags for the driver to know to handle it as an adx
-//////////////////////////////////////////////////////////////////////////////
-
-inline void smpc_wait_till_ready (void)
+void smpc_wait_till_ready (void)
 {
    // Wait until SF register is cleared
    while(SMPC_REG_SF & 0x1) { }
@@ -70,7 +62,7 @@ inline void smpc_wait_till_ready (void)
 
 //////////////////////////////////////////////////////////////////////////////
 
-inline void smpc_issue_command(unsigned char cmd)
+void smpc_issue_command(unsigned char cmd)
 {
    // Set SF register so that no other command can be issued.
    SMPC_REG_SF = 1;
@@ -81,7 +73,7 @@ inline void smpc_issue_command(unsigned char cmd)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void	load_driver_binary(Sint8 * filename, void * buffer)
+void	load_driver_binary(Sint8 * filename, void * buffer, int master_adx_frequency)
 {
 
 	GfsHn s_gfs;
@@ -109,13 +101,27 @@ void	load_driver_binary(Sint8 * filename, void * buffer)
 	*master_volume = 0x20F; //Set max master volume + 4mbit memory // Very important, douglath
 	slDMACopy(buffer, (void*)SNDRAM, file_size);
 	slDMAWait();
+	if(master_adx_frequency == ADX_MASTER_768)
+	{
+		m68k_com->drv_adx_coef_1 = ADX_768_COEF_1;
+		m68k_com->drv_adx_coef_2 = ADX_768_COEF_2;
+	} else if(master_adx_frequency == ADX_MASTER_1152){
+		m68k_com->drv_adx_coef_1 = ADX_1152_COEF_1;
+		m68k_com->drv_adx_coef_2 = ADX_1152_COEF_2;
+	} else if(master_adx_frequency == ADX_MASTER_1536){
+		m68k_com->drv_adx_coef_1 = ADX_1536_COEF_1;
+		m68k_com->drv_adx_coef_2 = ADX_1536_COEF_2;
+	} else if(master_adx_frequency == ADX_MASTER_2304){
+		m68k_com->drv_adx_coef_1 = ADX_2304_COEF_1;
+		m68k_com->drv_adx_coef_2 = ADX_2304_COEF_2;
+	}
 	// Turn on Sound CPU again
 	smpc_wait_till_ready();
 	smpc_issue_command(SMPC_CMD_SNDON);
 	//
 }
 	
-void			load_drv(void)
+void			load_drv(int master_adx_frequency)
 {
 	// Make sure SCSP is set to 512k mode
 	*(unsigned char *)(0x25B00400) = 0x02;
@@ -127,7 +133,7 @@ void			load_drv(void)
 	void * binary_buffer = (void*)2097152;
 	
 	// Copy driver over
-	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer);
+	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer, master_adx_frequency);
 	m68k_com->start = 0xFFFF;
 }
 
@@ -178,7 +184,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1);
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, false, PCM_SYS_REGION); //Iniitalize as max volume
-	m68k_com->pcmCtrl[numberPCMs].bitDepth = 0; //Select 16-bit
+	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_16BIT; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
 
@@ -229,13 +235,90 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
 	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size);
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, true, PCM_SYS_REGION); //Iniitalize as max volume
-	m68k_com->pcmCtrl[numberPCMs].bitDepth = 1; //Select 8-bit
+	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_8BIT; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
 
 
 	numberPCMs++; //Increment pcm #
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
+	return (numberPCMs-1); //Return the PCM # this sound recieved
+}
+
+// Recursive function to return gcd of a and b 
+short gcd(short a, short b) 
+{ 
+    if (a == 0)
+        return b; 
+    return gcd(b % a, a); 
+} 
+ 
+// Function to return LCM of two numbers 
+// Used specifically to find the buffer size for ADX sound effects
+short lcm(short a, short b) 
+{ 
+    return (a / gcd(a, b)) * b;
+} 
+
+short		load_adx(Sint8 * filename)
+{
+	static adx_header adx;
+	
+	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
+
+	int octr;
+	int shiftr;
+	int fnsr;
+	Sint32 local_name = GFS_NameToId(filename);
+
+//////////////////////////
+// Step 1: Load the size of the header from the file to the header's location
+//////////////////////////
+	GFS_Load(local_name, 0, (Uint32 *)&adx, sizeof(adx_header));
+//////////////////////////
+// Step 2: Check the data we just loaded and make sure it's an ADX file.
+// If the data does not match what the decompression routine expects, this function will return -1.
+//////////////////////////
+	// jo_printf(13, 9, "ohalf(%i)", adx.one_half);
+	// jo_printf(13, 10, "blocksz(%i)", adx.block_size);
+	// jo_printf(13, 11, "bitdepth(%i)", adx.bit_depth);
+	// jo_printf(13, 12, "srate(%i)", adx.sample_rate);
+	if(adx.one_half != 32768 || adx.block_size != 18 || adx.bit_depth != 4) return -1; 
+	if(adx.sample_rate != 23040 && adx.sample_rate != 15360 && adx.sample_rate != 11520 && adx.sample_rate != 7680)
+	{
+		jo_printf(0, 1, "!(ADX INVALID BITRATE)!");
+		return -2;
+	}
+//////////////////////////
+// Step 3: Parse the data in the header to the sound driver PCM control struct.
+// Special things for ADX is the playsize is actually the # of ADX frames, not the number of samples.
+// We expect a block size of 16, so each frame has 16 bytes of sample data which is 32 samples.
+//////////////////////////
+	octr = PCM_CALC_OCT(adx.sample_rate);
+	shiftr = PCM_CALC_SHIFT_FREQ(octr);
+	fnsr = PCM_CALC_FNS(adx.sample_rate, shiftr);
+	// Because we ""dumbly"" load the header to sound RAM, let's give the used pointer the offset.
+	unsigned int working_address = (unsigned int)(scsp_load) + adx.offset2data + 4;
+	m68k_com->pcmCtrl[numberPCMs].hiAddrBits = (unsigned short)( (unsigned int)working_address >> 16);
+	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)working_address & 0xFFFF);
+	m68k_com->pcmCtrl[numberPCMs].pitchword = PCM_SET_PITCH_WORD(octr, fnsr);
+	m68k_com->pcmCtrl[numberPCMs].playsize = (adx.sample_ct / 32);
+	short bpb = calculate_bytes_per_blank((int)adx.sample_rate, false, PCM_SYS_REGION); //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = bpb;
+	m68k_com->pcmCtrl[numberPCMs].decompression_size = lcm(bpb, bpb + 64)<<1;
+	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_ADX; //Select ADX type
+	m68k_com->pcmCtrl[numberPCMs].loopType = PCM_SEMI; //Initialize as semi-protected.
+	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	numberPCMs++;
+/////////////////////////
+// Step 4: Load the compressed ADX data to sound RAM. Unfortunately, we must include the 20 byte header.
+// We want to load from an offset location from CD and then load (sample_ct / 32) * 18 bytes.
+/////////////////////////
+	unsigned int number_of_bytes_to_load = (adx.sample_ct / 32) * 18;
+	number_of_bytes_to_load += ((unsigned int)number_of_bytes_to_load & 1) ? 1 : 0;
+	number_of_bytes_to_load += ((unsigned int)number_of_bytes_to_load & 3) ? 2 : 0;
+	GFS_Load(local_name, 0, (Uint32 *)((unsigned int)scsp_load + SNDRAM), number_of_bytes_to_load);
+	scsp_load = (unsigned int *)((unsigned int )scsp_load + number_of_bytes_to_load);
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
