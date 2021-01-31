@@ -3,7 +3,7 @@ SEGA Saturn SCSP Command & Control Driver and Linked Library
 by Ponut64
 Hitherto otherwise known as "poneSound"
 
-Currently supports playback of uncompressed 8-bit signed and 16-bit big-endian signed raw audio samples of up to 65536 samples in size. That would make 64KB the largest 8-bit raw size, and 32KB the largest 16-bit raw size.
+Currently supports playback of uncompressed 8-bit signed and 16-bit big-endian signed raw audio samples of up to 65536 samples in size. That would make 64KB the largest 8-bit raw size, and 128kb the largest 16-bit raw size.
 
 Additionally supports real-time decompression and playback of ADX sound data by sound CPU from sound RAM. Only one channel of this is programmed, but theoretically more are possible provided the bitrate is low enough. The available bitrates for use with ADX are 23040 Hz, 15360 Hz, 11520 Hz, and 7680 Hz. Only one bitrate can be properly decompressed by the Sound CPU at a time due to the need to build multiplication tables for ADX' advanced decompression method.
 
