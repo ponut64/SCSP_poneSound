@@ -693,6 +693,10 @@ void	pcm_control_loop(void)
 	loopingIndex = 0;
 	volatileIndex = 0;
 	
+	/*
+	A new control loop for multiple ADX sounds is required.
+	*/
+	
 	//Loop to find the looping indexes
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
@@ -820,7 +824,7 @@ void	pcm_control_loop(void)
 				play_semi_protected_sound(loopingPCMs[l]); 
 				}
 				icsr_index++;
-			} else {
+			} else if(lctrl->icsr_target != -1){ //Sound has an ICSR
 				//Update the sound
 				if(lctrl->bitDepth == PCM_TYPE_ADX)
 				{
