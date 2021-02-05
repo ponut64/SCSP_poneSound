@@ -54,7 +54,7 @@ void	lead_function(void) //Link start to main
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Place all includes past this line
 #define PCM_CTRL_MAX	(64)
-#define ADX_CTRL_MAX	(2)
+#define ADX_CTRL_MAX	(3)
 #define DRV_SYS_END		(45 * 1024) //System defined safe end of driver's address space
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
@@ -151,7 +151,7 @@ typedef struct {
 	unsigned short bytes_per_blank; //Bytes the PCM will play every time the driver is run (vblank)
 	unsigned short decompression_size; //Size of the buffer used for an ADX sound effect. Specifically sized by Master SH2.
 	unsigned char sh2_permit; //Does the SH2 permit this command? If TRUE, run the command. If FALSE, key its ICSR OFF.
-	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
+	volatile char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
 typedef struct {
@@ -165,7 +165,9 @@ typedef struct {
 	short current_frame;
 	short last_sample;
 	short last_last_sample;
+	char	buf_string[2];
 	volatile short * dst;
+	volatile short * original_dst;
 	volatile unsigned short * src;
 } _ADX_CTRL; //Driver Local ADX Struct
 
@@ -185,13 +187,13 @@ volatile _ICSR * csr = (volatile _ICSR *)0x100000; //There are 32 of these.
 _PCM_CTRL	pcmCtrlData[PCM_CTRL_MAX + ADX_CTRL_MAX];
 char		ICSR_Busy[32];
 char		icsr_index = 0;
-short		loopingIndex = 0;
-short		volatileIndex = 0;
 short		loopingPCMs[PCM_CTRL_MAX];
 short		volatilePCMs[PCM_CTRL_MAX];
+short		adxPCMs[PCM_CTRL_MAX];
 int			dataTimers[32];
 ///////////////////////////
 #define ADX_STATUS_NONE			(0)
+#define ADX_STATUS_ACTIVE		(1)
 #define ADX_STATUS_DECOMP		(1<<1)
 #define ADX_STATUS_EMPTY		(1<<2)
 #define ADX_STATUS_FULL			(1<<3)
@@ -199,14 +201,10 @@ int			dataTimers[32];
 #define ADX_STATUS_START		(1<<5)
 #define ADX_STATUS_END			(1<<6)
 #define ADX_STATUS_LAST			(1<<7)
-#define ADX_STOP			(0)
-#define ADX_LOOP			(1)
-#define ADX_PROTECTED		(2)
-#define ADX_SEMI_PROTECTED	(3)
 ///////////////////////////
 // ADX Control Data Struct
 ///////////////////////////
-_ADX_CTRL adx;
+_ADX_CTRL adx[ADX_CTRL_MAX];
 ///////////////////////////
 // ADX Decompression Tables
 // Filled at driver start-up
@@ -219,8 +217,16 @@ short * center_coef_2;
 short adx_work_buf[(10 * 1024)];
 // ADX decompression nibble table
 const short nibble_to_int[16] = {0,1,2,3,4,5,6,7,-8,-7,-6,-5,-4,-3,-2,-1};
-// ADX PCM VDP1_BASE_CMDCTRL Dummy. Sound slot that is configured by the ADX system.
-short adx_dummy_1 = PCM_CTRL_MAX;
+// ADX PCM_CTRL Dummy. Sound slot that is configured by the ADX system.
+short adx_dummy[ADX_CTRL_MAX];
+// ADX Buffer Control Data
+// "6" buffer slots
+// 7.68 audio takes 2 slots,
+// 11.52 audio takes 3 slots,
+// 15.36 audio takes 4 slots,
+// 23.04 audio takes 6 slots.
+short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[6000]};
+short adx_buffer_used[6];
 
 void	driver_data_init(void)
 {
@@ -241,10 +247,22 @@ void	driver_data_init(void)
 		pcmCtrlData[k].icsr_target = -1;
 		loopingPCMs[k] = -1;
 		volatilePCMs[k] = -1;
+		adxPCMs[k] = -1;
 	}
 	/////////////////////////////////////////////////////
 	// ADX Control Struct init
-	adx.status = 0;
+	/////////////////////////
+	for(short a = 0; a < ADX_CTRL_MAX; a++)
+	{
+		adx_dummy[a] = PCM_CTRL_MAX + a;
+		adx[a].pcm_number = -1;
+		adx[a].status = 0;
+		pcmCtrlData[adx_dummy[a]].loopType = 1; // fwd loop
+		pcmCtrlData[adx_dummy[a]].hiAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] >> 16);
+		pcmCtrlData[adx_dummy[a]].loAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] & 0xFFFF);
+		pcmCtrlData[adx_dummy[a]].volume = 7;
+		pcmCtrlData[adx_dummy[a]].bitDepth = 0;
+	}
 	/////////////////////////////////////////////////////
 	// ADX Decompression Table Initialization
 	/////////////////////////////////////////////////////
@@ -271,14 +289,7 @@ void	driver_data_init(void)
 		center_coef_2[a>>4] = (short)temp_value;
 		last_shift = a>>4;
 	}
-	/////////////////////////
-	// ADX Dummy Set-up
-	/////////////////////////
-	pcmCtrlData[adx_dummy_1].loopType = 1; // fwd loop
-	pcmCtrlData[adx_dummy_1].hiAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] >> 16);
-	pcmCtrlData[adx_dummy_1].loAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] & 0xFFFF);
-	pcmCtrlData[adx_dummy_1].volume = 7;
-	pcmCtrlData[adx_dummy_1].bitDepth = 0;
+
 	// Set start to a specific number to communicate the driver has initialized
 	sh2Com->start = 0x7777;
 }
@@ -364,7 +375,7 @@ adx->last_last_sample = hist2;
 }
 #pragma GCC pop_options
 
-void	driver_end_sound(short * cst, _PCM_CTRL * lctrl)
+void	driver_end_sound(volatile char * cst, _PCM_CTRL * lctrl)
 {
 	csr[*cst].keys = (0); //Key select OFF
 	csr[*cst].keys |= 1<<12; //Key EXECUTE OFF
@@ -374,14 +385,30 @@ void	driver_end_sound(short * cst, _PCM_CTRL * lctrl)
 	dataTimers[*cst] = 0; //Clear playback timer
 }
 
-void	driver_stop_slot(short * cst)
+void	driver_stop_slot(volatile char * cst)
 {
 	csr[*cst].keys = (0); //Key select OFF
 	csr[*cst].keys |= 1<<12; //Key EXECUTE OFF
 	dataTimers[*cst] = 0;
 }
 
-void	driver_start_slot_with_sound(short * cst, _PCM_CTRL * lctrl)
+short	find_free_slot(_PCM_CTRL * lctrl)
+{
+	//
+	while(ICSR_Busy[icsr_index] != -1) //Find an inactive channel for the sound
+	{
+		icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
+	}
+	//If there is no free ICSR, leave the function -- leaving the ICSR set to -1.
+	if(icsr_index >= 32) return -1;
+	//
+	//Give sound an ICSR index
+	lctrl->icsr_target = icsr_index;
+	return 1;
+}
+
+
+void	driver_start_slot_with_sound(volatile char * cst, _PCM_CTRL * lctrl)
 {
 	csr[*cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | Bit depth | high bits of address
 	csr[*cst].start_addr = lctrl->loAddrBits;
@@ -409,8 +436,8 @@ void	play_volatile_sound(_PCM_CTRL * lctrl)
 
 	short cst = lctrl->icsr_target;
 	
-	driver_stop_slot(&cst);
-	driver_start_slot_with_sound(&cst, lctrl);
+	driver_stop_slot(&lctrl->icsr_target);
+	driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
 	
 	csr[cst].keys |= 1<<12; //KEY EXECUTE must be written last.
 	lctrl->sh2_permit = 0; //Disallow sound
@@ -427,8 +454,8 @@ void	play_protected_sound(short index)
 //This ICSR is not presently associated with the protected sound, so we set it up.
 		if(ICSR_Busy[cst] != index){
 			
-	driver_stop_slot(&cst);
-	driver_start_slot_with_sound(&cst, lctrl);
+	driver_stop_slot(&lctrl->icsr_target);
+	driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
 	
 		} else {
 	//Allow live volume and pitch adjustment of semi protected soundssounds
@@ -438,7 +465,7 @@ void	play_protected_sound(short index)
 	
 		if(dataTimers[cst] >= (lctrl->playsize<<(1 - lctrl->bitDepth)) ) //1 - bitDepth is an expression that will or will not multiply the playsize by 2,
 		{																//depending on if it is 8 bits per sample or 16 bits per sample. Remember,
-			driver_end_sound(&cst, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
+			driver_end_sound(&lctrl->icsr_target, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -456,8 +483,8 @@ void	play_semi_protected_sound(short index)
 		if(lctrl->sh2_permit == 1)
 		{
 			
-	driver_stop_slot(&cst);
-	driver_start_slot_with_sound(&cst, lctrl);
+	driver_stop_slot(&lctrl->icsr_target);
+	driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
 	//With semi-protected sound, the SH2 can command the sound to re-start.
 	//To facilitate this, the permission boolean is set to 0 in antipication of the SH2 potentially permitting another start.
 	lctrl->sh2_permit = 0; 
@@ -469,7 +496,7 @@ void	play_semi_protected_sound(short index)
 		
 		if(dataTimers[cst] >= (lctrl->playsize<<(1 - lctrl->bitDepth)) ) //1 - bitDepth is an expression that will or will not multiply the playsize by 2,
 		{																//depending on if it is 8 bits per sample or 16 bits per sample. Remember,
-			driver_end_sound(&cst, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
+			driver_end_sound(&lctrl->icsr_target, lctrl);								//if the bits per sample is 16, the playsize >>=1 its data size.
 		} else {
 			ICSR_Busy[cst] = index;	//Associate this ICSR with this protected sound.
 			dataTimers[cst] += lctrl->bytes_per_blank;
@@ -507,54 +534,230 @@ void	set_looping_sound(short index)
 	ICSR_Busy[cst] = index;	//Associate this ICSR with the looping sound
 }
 
-void	play_adx(short adx_index, short adx_control_type)
+void	play_adx(short pcm_control_index, short loop_type)
 {
-	_PCM_CTRL * snd = &pcmCtrlData[adx_index];
-	short cst = snd->icsr_target;
-	sh2Com->debug_state = adx.status;
+	_PCM_CTRL * snd = &pcmCtrlData[pcm_control_index];
+	short target_adx = -1;
+	short buffers_empty = 0;
+		sh2Com->debug_state = adx[0].pcm_number;
+		sh2Com->drv_adx_coef_1 = adx[1].pcm_number;
+		sh2Com->drv_adx_coef_2 = adx[2].pcm_number;
 	///////////////////////////////////////
-	// ADX Play-type Condition Management
-	// A structured copy of "PCM_PROTECTED", "PCM_SEMI", and "PCM_FWD_LOOP".
-	// It should be noted that ADX sounds **cannot** be played volatile, or in any other kind of loop.
-	if(snd->sh2_permit == 1)
+	// ADX Condition Manager Selection
+	for(short f = 0; f < ADX_CTRL_MAX; f++)
 	{
-		if(adx_control_type == ADX_SEMI_PROTECTED || (adx_control_type == ADX_PROTECTED && adx.status == ADX_STATUS_NONE))
+		if(adx[f].pcm_number == -1 && adx[f].status == ADX_STATUS_NONE && snd->icsr_target == -1 && snd->sh2_permit == 1)
 		{
-			//sh2Com->debug_state = ('A' | ('S'<<8));
-			if(adx_control_type == ADX_SEMI_PROTECTED) snd->sh2_permit = 0;
-			adx.status = ADX_STATUS_START;
-			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
-			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
-			adx.decomp_demand = snd->bytes_per_blank + 64;
-			//Decompression space is the size of the playback buffer, in bytes.
-			adx.decomp_space = snd->decompression_size;
-			//Recharge point is the point at which decompression will start.
-			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
-			adx.recharge_point = snd->decompression_size >> 1;
-			adx.current_frame = 0;
-			adx.src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
-			adx.dst = &adx_work_buf[0];
-			adx.work_decomp_pt = 0;
-			adx.work_play_pt = 0;
-		} else if(adx_control_type == ADX_LOOP && adx.status == ADX_STATUS_NONE)
+			//Try to find a free slot to play the sound in.
+			//If none is found, exit this function.
+			if(!find_free_slot(snd)) return;
+			target_adx = f;
+			adx[f].pcm_number = pcm_control_index;
+			adx[f].status = ADX_STATUS_ACTIVE;
+			if(snd->bytes_per_blank == 256)
+			{
+				//Find two free slots
+				for(short l = 0; l < 6; l++)
+				{
+					if(adx_buffer_used[l] == 0)
+					{
+						buffers_empty++;
+					}
+					if(buffers_empty >= 2) break;
+				}
+				if(!adx_buffer_used[5] && !adx_buffer_used[4])
+				{
+					adx_buffer_used[4] = 1;
+					adx_buffer_used[5] = 1;
+					adx[f].original_dst = adx_buf_addr[2];
+					adx[f].buf_string[0] = 4;
+					adx[f].buf_string[1] = 5;
+				} else if(!adx_buffer_used[3] && !adx_buffer_used[2])
+				{
+					adx_buffer_used[2] = 1;
+					adx_buffer_used[3] = 1;
+					adx[f].original_dst = adx_buf_addr[1];
+					adx[f].buf_string[0] = 2;
+					adx[f].buf_string[1] = 3;
+				} else if(!adx_buffer_used[0] && !adx_buffer_used[1])
+				{
+					adx_buffer_used[0] = 1;
+					adx_buffer_used[1] = 1;
+					adx[f].original_dst = adx_buf_addr[0];
+					adx[f].buf_string[0] = 0;
+					adx[f].buf_string[1] = 1;
+				} else {
+					adx[f].pcm_number = -1;
+					adx[f].status = ADX_STATUS_NONE;
+					driver_end_sound(&snd->icsr_target, snd);
+					return;
+				}
+			} else if(snd->bytes_per_blank == 384)
+			{
+				//Find three free slots
+				for(short l = 0; l < 6; l++)
+				{
+					if(adx_buffer_used[l] == 0)
+					{
+						buffers_empty++;
+					}
+					if(buffers_empty >= 3) break;
+				}
+				if(!adx_buffer_used[5] && !adx_buffer_used[4] && !adx_buffer_used[3])
+				{
+					adx_buffer_used[3] = 1;
+					adx_buffer_used[4] = 1;
+					adx_buffer_used[5] = 1;
+					adx[f].original_dst = adx_buf_addr[1];
+					adx[f].buf_string[0] = 3;
+					adx[f].buf_string[1] = 5;
+				} else if(!adx_buffer_used[2] && !adx_buffer_used[1] && !adx_buffer_used[0])
+				{
+					adx_buffer_used[0] = 1;
+					adx_buffer_used[1] = 1;
+					adx_buffer_used[2] = 1;
+					adx[f].original_dst = adx_buf_addr[0];
+					adx[f].buf_string[0] = 0;
+					adx[f].buf_string[1] = 2;
+				} else {
+					adx[f].pcm_number = -1;
+					adx[f].status = ADX_STATUS_NONE;
+					driver_end_sound(&snd->icsr_target, snd);
+					return;
+				}
+			} else if(snd->bytes_per_blank == 512)
+			{
+				//Find four free slots
+				for(short l = 0; l < 6; l++)
+				{
+					if(adx_buffer_used[l] == 0)
+					{
+						buffers_empty++;
+					}
+					if(buffers_empty >= 4) break;
+				}
+				if(!adx_buffer_used[5] && !adx_buffer_used[4] && !adx_buffer_used[3] && !adx_buffer_used[2])
+				{
+					adx_buffer_used[2] = 1;
+					adx_buffer_used[3] = 1;
+					adx_buffer_used[4] = 1;
+					adx_buffer_used[5] = 1;
+					adx[f].original_dst = adx_buf_addr[1];
+					adx[f].buf_string[0] = 2;
+					adx[f].buf_string[1] = 5;
+				} else if(!adx_buffer_used[3] && !adx_buffer_used[2] && !adx_buffer_used[1] && !adx_buffer_used[0])
+				{
+					adx_buffer_used[0] = 1;
+					adx_buffer_used[1] = 1;
+					adx_buffer_used[2] = 1;
+					adx_buffer_used[3] = 1;
+					adx[f].original_dst = adx_buf_addr[0];
+					adx[f].buf_string[0] = 0;
+					adx[f].buf_string[1] = 3;
+				} else {
+					adx[f].pcm_number = -1;
+					adx[f].status = ADX_STATUS_NONE;
+					driver_end_sound(&snd->icsr_target, snd);
+					return;
+				}
+			} else if(snd->bytes_per_blank == 768)
+			{
+				//Only work if no slots are used
+				
+				for(short l = 0; l < 6; l++)
+				{
+					if(adx_buffer_used[l] == 0)
+					{
+						buffers_empty++;
+					}
+					if(buffers_empty >= 6) break;
+				}
+				if(buffers_empty != 6)
+				{
+					adx[f].pcm_number = -1;
+					adx[f].status = ADX_STATUS_NONE;
+					driver_end_sound(&snd->icsr_target, snd);
+					return;
+				} else {
+					adx_buffer_used[0] = 1;
+					adx_buffer_used[1] = 1;
+					adx_buffer_used[2] = 1;
+					adx_buffer_used[3] = 1;
+					adx_buffer_used[4] = 1;
+					adx_buffer_used[5] = 1;
+					adx[f].original_dst = adx_buf_addr[0];
+					adx[f].buf_string[0] = 0;
+					adx[f].buf_string[1] = 5;
+				}
+
+			} else {
+				//Invalid byte-rate
+					adx[f].pcm_number = -1;
+					adx[f].status = ADX_STATUS_NONE;
+					driver_end_sound(&snd->icsr_target, snd);
+					return;
+			}
+			break;
+		} else if(adx[f].pcm_number == pcm_control_index && (adx[f].status & ADX_STATUS_ACTIVE))
 		{
-			adx.status = ADX_STATUS_START;
-			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
-			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
-			adx.decomp_demand = snd->bytes_per_blank + 64;
-			//Decompression space is the size of the playback buffer, in bytes.
-			adx.decomp_space = snd->decompression_size;
-			//Recharge point is the point at which decompression will start.
-			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
-			adx.recharge_point = snd->decompression_size >> 1;
-			adx.current_frame = 0;
-			adx.src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
-			adx.dst = &adx_work_buf[0];
-			adx.work_decomp_pt = 0;
-			adx.work_play_pt = 0;
+			target_adx = f;
+			break;
 		}
 	}
-	
+		//If the above loops did not find an available ADX slot, this value will be -1.
+		//We should not continue in this case.
+		if(target_adx == -1) return;
+	///////////////////////////////////////
+	// ADX Play-type Condition Management
+	if(snd->sh2_permit == 1)
+	{
+		if(loop_type == PCM_SEMI || (loop_type == PCM_PROTECTED && adx[target_adx].status == ADX_STATUS_NONE))
+		{
+			//sh2Com->debug_state = ('A' | ('S'<<8));
+			if(loop_type == PCM_SEMI) snd->sh2_permit = 0;
+			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
+			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
+			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
+			adx[target_adx].decomp_demand = snd->bytes_per_blank + 64;
+			//Decompression space is the size of the playback buffer, in bytes.
+			adx[target_adx].decomp_space = snd->decompression_size;
+			//Recharge point is the point at which decompression will start.
+			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
+			adx[target_adx].recharge_point = snd->decompression_size >> 1;
+			adx[target_adx].current_frame = 0;
+			adx[target_adx].src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
+			adx[target_adx].dst = adx[target_adx].original_dst;
+			adx[target_adx].work_decomp_pt = 0;
+			adx[target_adx].work_play_pt = 0;
+		} else if(loop_type == PCM_FWD_LOOP && adx[target_adx].status == ADX_STATUS_NONE)
+		{
+			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
+			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
+			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
+			adx[target_adx].decomp_demand = snd->bytes_per_blank + 64;
+			//Decompression space is the size of the playback buffer, in bytes.
+			adx[target_adx].decomp_space = snd->decompression_size;
+			//Recharge point is the point at which decompression will start.
+			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
+			adx[target_adx].recharge_point = snd->decompression_size >> 1;
+			adx[target_adx].current_frame = 0;
+			adx[target_adx].src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
+			adx[target_adx].dst = adx[target_adx].original_dst;
+			adx[target_adx].work_decomp_pt = 0;
+			adx[target_adx].work_play_pt = 0;
+		}
+	}
+	//If this function attempted to run past this point to manage an ADX sound without a valid ICSR,
+	//exit this function. There is no point in running it then, as it won't play sound.
+	if(snd->icsr_target == -1) return;
+	//If this function attempted to run past this point with the ADX controller status at "NONE",
+	//the attached PCM control data is in an error state. Correct this error, and exit the function.
+	if(adx[target_adx].status == ADX_STATUS_NONE)
+	{
+		adx[target_adx].pcm_number = -1;
+		driver_end_sound(&snd->icsr_target, &pcmCtrlData[adx_dummy[target_adx]]);
+		return;
+	}
 	///////////////////////////////////////
 	// ADX Starting
 	// When an ADX sound is started, first our decompression demand for this refresh cycle is completed.
@@ -563,28 +766,30 @@ void	play_adx(short adx_index, short adx_control_type)
 	// The ADX dummy is set to point to the decompression buffer,
 	// and the SCSP is set to play back 16-bit signed PCM from that region.
 	// On the next refresh cycle, the driver will undergo decompression of more data, as the buffer is not full.
-	if(adx.status == ADX_STATUS_START)
+	if(adx[target_adx].status & ADX_STATUS_START)
 	{
 		//sh2Com->debug_state = ('S' | ('T'<<8));
 		//Decompress (decomp_demand) # of bytes to (dst)
 		//Then start playing the sound
-		for(short i = 0; i < adx.decomp_demand; )
+		for(short i = 0; i < adx[target_adx].decomp_demand; )
 		{
-			decompress_adx_frame(&adx);
+			decompress_adx_frame(&adx[target_adx]);
 			i += 64;
-			adx.current_frame += 1;
+			adx[target_adx].current_frame += 1;
 		}
-		adx.work_decomp_pt += adx.decomp_demand;
+		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 		//ADX dummy 1 being a looping PCM control set to point at the adx work buf.
-		pcmCtrlData[adx_dummy_1].playsize = (adx.decomp_space)>>1;
-		pcmCtrlData[adx_dummy_1].pitchword = snd->pitchword;
-		pcmCtrlData[adx_dummy_1].bytes_per_blank = snd->bytes_per_blank;
-		pcmCtrlData[adx_dummy_1].pan = snd->pan;
-		pcmCtrlData[adx_dummy_1].volume = snd->volume;
-		pcmCtrlData[adx_dummy_1].icsr_target = cst;
-		set_looping_sound(adx_dummy_1);
-		adx.status |= (ADX_STATUS_PLAY | ADX_STATUS_DECOMP);
-	} else if(adx.status & ADX_STATUS_DECOMP && !(adx.status & ADX_STATUS_FULL))
+		pcmCtrlData[adx_dummy[target_adx]].playsize = (adx[target_adx].decomp_space)>>1;
+		pcmCtrlData[adx_dummy[target_adx]].pitchword = snd->pitchword;
+		pcmCtrlData[adx_dummy[target_adx]].bytes_per_blank = snd->bytes_per_blank;
+		pcmCtrlData[adx_dummy[target_adx]].pan = snd->pan;
+		pcmCtrlData[adx_dummy[target_adx]].volume = snd->volume;
+		pcmCtrlData[adx_dummy[target_adx]].icsr_target = snd->icsr_target;
+		pcmCtrlData[adx_dummy[target_adx]].loAddrBits = (unsigned short)((unsigned int)adx[target_adx].original_dst);
+		set_looping_sound(adx_dummy[target_adx]);
+		adx[target_adx].status ^= ADX_STATUS_START;
+		adx[target_adx].status |= (ADX_STATUS_PLAY | ADX_STATUS_DECOMP);
+	} else if(adx[target_adx].status & ADX_STATUS_DECOMP && !(adx[target_adx].status & ADX_STATUS_FULL))
 	{
 		///////////////////////////////////////
 		// ADX Real-time Decompression
@@ -592,56 +797,56 @@ void	play_adx(short adx_index, short adx_control_type)
 		// An ADX "frame" is 18 bytes which contains 64 4-bit nibbles and 1 16-bit scale value.
 		// It should be noted, if it wasn't clear already, that your sound's byterate must be divisible by 64.
 		// The amount of frames decompressed is the 60hz byterate of the raw PCM frequency, divided by 64, plus 1.
-		for(short i = 0; i < adx.decomp_demand; )
+		for(short i = 0; i < adx[target_adx].decomp_demand; )
 		{
 			///////////////////////////////////////
 			// ADX Decompression Completion Condition
 			// The playsize of the ADX PCM control slot contains the # of ADX frames of the sound.
 			// If the current frame being decompressed is greater than this, the sound has been fully decompressed.
 			// The status is updated as such, and no more ADX frames are to be decompressed (there are no more!).
-			if(adx.current_frame > snd->playsize)
+			if(adx[target_adx].current_frame > snd->playsize)
 			{
-				adx.status |= ADX_STATUS_FULL;
+				adx[target_adx].status |= ADX_STATUS_FULL;
 				break;
 			}
-			decompress_adx_frame(&adx);
+			decompress_adx_frame(&adx[target_adx]);
 			i += 64;
-			adx.current_frame += 1;
+			adx[target_adx].current_frame += 1;
 		}
-		adx.work_decomp_pt += adx.decomp_demand;
+		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 	}
 
-	if(adx.status & ADX_STATUS_PLAY)
+	if(adx[target_adx].status & ADX_STATUS_PLAY)
 	{
-		adx.work_play_pt += snd->bytes_per_blank;
+		adx[target_adx].work_play_pt += snd->bytes_per_blank;
 		///////////////////////////////////////
 		// ADX Decompression Starting
 		// If the play pointer has met or exceeded the recharge point,
 		// this is the time we have have calculated as the appropriate time to begin decompression into the buffer.
 		// We do start this now to maintain synchronization: It will finish before the SCSP gets back here after it loops,
 		// and it will be done after the SCSP has looped.
-		if(adx.work_play_pt >= adx.recharge_point && !(adx.status & ADX_STATUS_FULL))
+		if(adx[target_adx].work_play_pt >= adx[target_adx].recharge_point && !(adx[target_adx].status & ADX_STATUS_FULL))
 		{
-			adx.status |= ADX_STATUS_DECOMP;
+			adx[target_adx].status |= ADX_STATUS_DECOMP;
 		}
 		///////////////////////////////////////
 		// ADX Decompression Ending
 		// If we have decompressed enough data to fill up the decompression buffer,
 		// cease decompression and re-set the decompression target tracker and pointer.
-		if(adx.work_decomp_pt >= adx.decomp_space)
+		if(adx[target_adx].work_decomp_pt >= adx[target_adx].decomp_space)
 		{
-			adx.status ^= ADX_STATUS_DECOMP;
-			adx.work_decomp_pt = 0;
-			adx.dst = &adx_work_buf[0];
+			adx[target_adx].status ^= ADX_STATUS_DECOMP;
+			adx[target_adx].work_decomp_pt = 0;
+			adx[target_adx].dst = adx[target_adx].original_dst;
 		}
 		///////////////////////////////////////
 		// ADX Play Tracking
 		// If the maximal position of the SCSP in the playback buffer will have met or exceeded the size of it,
 		// we **know** the SCSP is going to go back to the beginning of the buffer.
 		// We know this because the SCSP has been set to play back this region of sound as a loop.
-		if(adx.work_play_pt >= adx.decomp_space)
+		if(adx[target_adx].work_play_pt >= adx[target_adx].decomp_space)
 		{
-			adx.work_play_pt = 0;
+			adx[target_adx].work_play_pt = 0;
 		}
 		///////////////////////////////////////
 		// ADX End Condition
@@ -649,21 +854,21 @@ void	play_adx(short adx_index, short adx_control_type)
 		// we have flagged the ADX status as FULL. The sound has been fully decompressed.
 		// At this point, we shouldn't immediately end the sound. The decompression point is ahead of the playback point.
 		// Thus, we want to end the sound only when the play point meets or passes the decompression point.
-		if(adx.work_play_pt >= adx.work_decomp_pt && adx.status & ADX_STATUS_FULL)
+		if(adx[target_adx].work_play_pt >= adx[target_adx].work_decomp_pt && adx[target_adx].status & ADX_STATUS_FULL)
 		{
-			if(adx_control_type == ADX_LOOP)
+			if(loop_type == PCM_FWD_LOOP)
 			{
 			//To set an ADX sound to loop, just.. restart it!
 			//But you *do* have to end the sound slot, and there is a blanking period involved.
-			adx.status = ADX_STATUS_START;
-			adx.current_frame = 0;
-			adx.src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
-			adx.dst = &adx_work_buf[0];
-			adx.work_decomp_pt = 0;
-			adx.work_play_pt = 0;
-			driver_end_sound(&cst, &pcmCtrlData[adx_dummy_1]);
+			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
+			adx[target_adx].current_frame = 0;
+			adx[target_adx].src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
+			adx[target_adx].dst = adx[target_adx].original_dst;
+			adx[target_adx].work_decomp_pt = 0;
+			adx[target_adx].work_play_pt = 0;
+			driver_end_sound(&snd->icsr_target, &pcmCtrlData[adx_dummy[target_adx]]);
 			} else {
-			adx.status = ADX_STATUS_END;
+			adx[target_adx].status = ADX_STATUS_END;
 			}
 		}
 	}
@@ -674,30 +879,36 @@ void	play_adx(short adx_index, short adx_control_type)
 	// Control data from the ADX dummy, ADX PCM control, and ADX control struct is cleared.
 	// In all cases, it is acceptable to indicate that the SH2 no longer permits the sound as looping conditions happen earlier.
 	// However, it's not always needed.
-	if(adx.status & ADX_STATUS_END || adx_control_type == ADX_STOP)
+	if(adx[target_adx].status & ADX_STATUS_END || loop_type == ADX_STATUS_NONE)
 	{
 		snd->sh2_permit = 0;
-		adx.status = ADX_STATUS_NONE;
-		driver_end_sound(&cst, &pcmCtrlData[adx_dummy_1]);
-		driver_end_sound(&cst, snd);
+		for(short s = adx[target_adx].buf_string[0]; s <= adx[target_adx].buf_string[1]; s++)
+		{
+			adx_buffer_used[s] = 0;
+		}
+		adx[target_adx].status = ADX_STATUS_NONE;
+		adx[target_adx].pcm_number = -1;
+		driver_end_sound(&snd->icsr_target, &pcmCtrlData[adx_dummy[target_adx]]);
+		driver_end_sound(&snd->icsr_target, snd);
 	}
 
 }
-
 
 void	pcm_control_loop(void)
 {
 	icsr_index = 0;
 	_PCM_CTRL * lctrl;
 
-	loopingIndex = 0;
-	volatileIndex = 0;
+	short	loopingIndex = 0;
+	short	adxIndex = 0;
+	short	volatileIndex = 0;
 	
 	/*
 	A new control loop for multiple ADX sounds is required.
 	*/
 	
-	//Loop to find the looping indexes
+	//////////////////////////////////////////////////
+	// Build List of each type of basic control method
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
 		lctrl = &pcmCtrlData[k];
@@ -705,10 +916,14 @@ void	pcm_control_loop(void)
 		{
 			volatilePCMs[volatileIndex] = k;
 			volatileIndex++;
-		} else if(lctrl->loopType != PCM_VOLATILE)
+		} else if(lctrl->loopType != PCM_VOLATILE && lctrl->bitDepth != PCM_TYPE_ADX)
 		{
 			loopingPCMs[loopingIndex] = k;
 			loopingIndex++;
+		} else if(lctrl->bitDepth == PCM_TYPE_ADX)
+		{
+			adxPCMs[adxIndex] = k;
+			adxIndex++;
 		}
 	}
 	
@@ -727,40 +942,15 @@ void	pcm_control_loop(void)
 			{
 				if(lctrl->icsr_target == -1) //The loop is not associated with an ICSR which _should_ mean it is not playing.
 				{
-					//
-					while(ICSR_Busy[icsr_index] != -1) //Find an inactive channel for the sound
-					{
-						icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
-					}
-					if(icsr_index >= 32) break;
-					//
-					//Start the sound
-					lctrl->icsr_target = icsr_index;
-					if(lctrl->bitDepth == PCM_TYPE_ADX)
-					{
-					play_adx(loopingPCMs[l], ADX_LOOP);
-					} else {
+					if(!find_free_slot(lctrl)) break;
 					set_looping_sound(loopingPCMs[l]); 
-					}
-					icsr_index++;
 				} else {
 					//Update the sound
-					if(lctrl->bitDepth == PCM_TYPE_ADX)
-					{
-					play_adx(loopingPCMs[l], ADX_LOOP);
-					} else {
 					set_looping_sound(loopingPCMs[l]); 
-					}
 				}
 			} else if(lctrl->icsr_target != -1) //If the loop is not allowed by the SH2, and it is associated with an ICSR, it is active. Turn it off.
 			{
-				if(lctrl->bitDepth == PCM_TYPE_ADX)
-				{
-					play_adx(loopingPCMs[l], ADX_STOP);
-				} else {
-					short csr = lctrl->icsr_target;
-					driver_end_sound(&csr, lctrl);
-				}
+					driver_end_sound(&lctrl->icsr_target, lctrl);
 			}
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//	PROTECTED SOUND CONTROL SEGMENT
@@ -772,30 +962,12 @@ void	pcm_control_loop(void)
 		{
 			if(lctrl->icsr_target == -1)	//If first run (no current ICSR)
 			{
-				//
-				while(ICSR_Busy[icsr_index] != -1) //Find an inactive channel for the sound
-				{
-					icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
-				}
-				if(icsr_index >= 32) break;
-				//
-				//Start the sound
-				lctrl->icsr_target = icsr_index;
-				if(lctrl->bitDepth == PCM_TYPE_ADX)
-				{
-				play_adx(loopingPCMs[l], ADX_PROTECTED);
-				} else {
+				//Attempt to grab a free ICSR. If there is none, function will return -1, and thus we will stop.
+				if(!find_free_slot(lctrl)) break;
 				play_protected_sound(loopingPCMs[l]); 
-				}
-				icsr_index++;
 			} else {
 				//Update the sound
-				if(lctrl->bitDepth == PCM_TYPE_ADX)
-				{
-				play_adx(loopingPCMs[l], ADX_PROTECTED);
-				} else {
 				play_protected_sound(loopingPCMs[l]); 
-				}
 			}
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//	SEMI-PROTECTED SOUND CONTROL SEGMENT
@@ -808,34 +980,25 @@ void	pcm_control_loop(void)
 		{
 			if(lctrl->icsr_target == -1 && lctrl->sh2_permit == 1) //Sound does not currently occupy an ICSR
 			{
-				//
-				while(ICSR_Busy[icsr_index] != -1) //Find an inactive channel for the sound
-				{
-					icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
-				}
-				if(icsr_index >= 32) break;
-				//
-				//Start the sound
-				lctrl->icsr_target = icsr_index;
-				if(lctrl->bitDepth == PCM_TYPE_ADX)
-				{
-				play_adx(loopingPCMs[l], ADX_SEMI_PROTECTED);
-				} else {
+				//Attempt to grab a free ICSR. If there is none, function will return -1, and thus we will stop.
+				if(!find_free_slot(lctrl)) break;
 				play_semi_protected_sound(loopingPCMs[l]); 
-				}
-				icsr_index++;
 			} else if(lctrl->icsr_target != -1){ //Sound has an ICSR
 				//Update the sound
-				if(lctrl->bitDepth == PCM_TYPE_ADX)
-				{
-				play_adx(loopingPCMs[l], ADX_SEMI_PROTECTED);
-				} else {
 				play_semi_protected_sound(loopingPCMs[l]); 
-				}
 			}
 		}
 	//////////////////////////////
 	//PCM Control Loop End Stub
+	}
+	
+	//////////////////////////////////////////
+	// ADX Control Loop
+	for(short a = 0; a < adxIndex; a++)
+	{
+		
+		lctrl = &pcmCtrlData[adxPCMs[a]];
+		play_adx(adxPCMs[a], lctrl->loopType);
 	}
 	
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -846,17 +1009,11 @@ void	pcm_control_loop(void)
 	for(short v = 0; v < volatileIndex; v++)
 	{
 		lctrl = &pcmCtrlData[volatilePCMs[v]];
-		//
-		while(ICSR_Busy[icsr_index] != -1)
+		if(lctrl->sh2_permit == 1)
 		{
-			icsr_index++; //Set forward the icsr_index until it has reached an inactive ICSR
-		}
-		if(icsr_index >= 32) break;
-		//
-		if(lctrl->loopType == 0 && lctrl->sh2_permit == 1){
-			lctrl->icsr_target = icsr_index;
+		//Attempt to grab a free ICSR. If there is none, function will return -1, and thus we will stop.
+			if(!find_free_slot(lctrl)) break;
 			play_volatile_sound(lctrl);
-			icsr_index++;
 		}
 	}
 
