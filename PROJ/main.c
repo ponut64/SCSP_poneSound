@@ -303,6 +303,8 @@ struct into another array member, and issue it to play.
 void	decompress_adx_frame(_ADX_CTRL * adx)
 {
 	
+static short scale_table[16];
+static short last_scale = 0;
 
 //Retrieve the scale which is a big-endian value less than 0x2000
 short scale = *adx->src++;
@@ -315,6 +317,21 @@ register short delta2;
 register short delta3;
 register short delta4;
 
+//Optimization: This reduces the most multiplications per 32 samples to 16, halving the # of muls.
+//Loop unrolling also means only one logical branch is added. The effective cost saving per sample is at least 32 cycles,
+//however it is likely more, as the scale between frames is not guaranteed to vary.
+if(scale != last_scale)
+{
+	scale_table[0] = nibble_to_int[0] * scale; scale_table[8] = nibble_to_int[8] * scale;
+	scale_table[1] = nibble_to_int[1] * scale; scale_table[9] = nibble_to_int[9] * scale;
+	scale_table[2] = nibble_to_int[2] * scale; scale_table[10] = nibble_to_int[10] * scale;
+	scale_table[3] = nibble_to_int[3] * scale; scale_table[11] = nibble_to_int[11] * scale;
+	scale_table[4] = nibble_to_int[4] * scale; scale_table[12] = nibble_to_int[12] * scale;
+	scale_table[5] = nibble_to_int[5] * scale; scale_table[13] = nibble_to_int[13] * scale;
+	scale_table[6] = nibble_to_int[6] * scale; scale_table[14] = nibble_to_int[14] * scale;
+	scale_table[7] = nibble_to_int[7] * scale; scale_table[15] = nibble_to_int[15] * scale;
+}
+last_scale = scale;
 
 for (short i = 0; i < 8; i++)
 {
@@ -323,10 +340,10 @@ for (short i = 0; i < 8; i++)
    /* Even samples use the high nibble. */
    /* Each nibble is a 4 bit two's complement signed value. */
    /* Due to big-endian data, the first nibbles come from the more significant byte */
-	delta1 = nibble_to_int[(sample_short & 0xF000) >> 12] * scale;
-	delta2 = nibble_to_int[(sample_short & 0xF00) >> 8] * scale;
-	delta3 = nibble_to_int[(sample_short & 0xF0) >> 4] * scale;
-	delta4 = nibble_to_int[sample_short & 0xF] * scale;
+	delta1 = scale_table[(sample_short & 0xF000) >> 12];
+	delta2 = scale_table[(sample_short & 0xF00) >> 8];
+	delta3 = scale_table[(sample_short & 0xF0) >> 4];
+	delta4 = scale_table[sample_short & 0xF];
 	////////////////////////////////////////////////////////////////////////////////////////////
 	//The data of hist1 is kept, so use another register.
 	histi = center_coef_1[hist1]; //We do not need to check the histories for their sign, as the tables themsselves are signed.
