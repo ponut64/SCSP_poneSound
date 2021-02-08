@@ -221,10 +221,19 @@ const short nibble_to_int[16] = {0,1,2,3,4,5,6,7,-8,-7,-6,-5,-4,-3,-2,-1};
 short adx_dummy[ADX_CTRL_MAX];
 // ADX Buffer Control Data
 // "6" buffer slots
-// 7.68 audio takes 2 slots,
-// 11.52 audio takes 3 slots,
-// 15.36 audio takes 4 slots,
-// 23.04 audio takes 6 slots.
+/*
+	Bitrate	|	Buffer Size	|	Demand	|	Slots?	|	IMA Slots?
+	7680		2560			320			2			1
+	9600 		3840			384			3			2
+	11520		5376			448			3			2
+	13440		7168			512			4			3
+	15360		9216			576			4			3
+	17280		11520			640			4			4
+	19200		14080			704			6			4
+	21120		16896			768			6			6
+	23040		19968			832			6			6
+			(Total: 20KB) 	(Total: 960)
+*/
 short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[6000]};
 short adx_buffer_used[6];
 
@@ -746,6 +755,8 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].dst = adx[target_adx].original_dst;
 			adx[target_adx].work_decomp_pt = 0;
 			adx[target_adx].work_play_pt = 0;
+			adx[target_adx].last_sample = 0;
+			adx[target_adx].last_last_sample = 0;
 		} else if(loop_type == PCM_FWD_LOOP && adx[target_adx].status == ADX_STATUS_NONE)
 		{
 			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
@@ -762,6 +773,8 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].dst = adx[target_adx].original_dst;
 			adx[target_adx].work_decomp_pt = 0;
 			adx[target_adx].work_play_pt = 0;
+			adx[target_adx].last_sample = 0;
+			adx[target_adx].last_last_sample = 0;
 		}
 	}
 	//If this function attempted to run past this point to manage an ADX sound without a valid ICSR,
