@@ -222,17 +222,22 @@ short adx_dummy[ADX_CTRL_MAX];
 // ADX Buffer Control Data
 // "6" buffer slots
 /*
+	-----------------------NTSC VERSION----------------------------
+		DRIVER REFRESH CYCLE : 60 HZ / 16.66ms
 	Bitrate	|	Buffer Size	|	Demand	|	Slots?	|	IMA Slots?
 	7680		2560			320			2			1
-	9600 		3840			384			3			2
 	11520		5376			448			3			2
-	13440		7168			512			4			3
 	15360		9216			576			4			3
-	17280		11520			640			4			4
-	19200		14080			704			6			4
-	21120		16896			768			6			6
 	23040		19968			832			6			6
-			(Total: 20KB) 	(Total: 960)
+			(Total: 20KB) 	(Total Budget: 960)
+	----------------------PAL VERSION------------------------------
+		DRIVER REFRESH CYCLE : 50 HZ / 20ms
+	Bitrate	|	Buffer Size	|	Demand	|	Slots?	|	IMA Slots?
+	6400		2560			320			2			?
+	9600		5376			448			3			?
+	12800		9216			576			4			?
+	19200		19968			832			6			?
+			(Total: 20KB) 	(Total Budget: 1152)
 */
 short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[6000]};
 short adx_buffer_used[6];

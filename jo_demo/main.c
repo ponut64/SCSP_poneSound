@@ -17,8 +17,7 @@ short adx4snd;
 
 void			my_draw(void)
 {
-	
-	 jo_printf(0, 5, "P64 PCM Driver Usage Demo");
+	jo_printf(0, 5, "P64 PCM Driver Usage Demo");
 	jo_printf(0, 8, "A to start an ADX semi-protected sound");
 	jo_printf(0, 9, "(will only start this sound type)");
 	jo_printf(0, 10, "(will restart whenever told to play)");
@@ -54,13 +53,14 @@ void			my_draw(void)
 	{
 	pcm_play(pcm8snd, PCM_PROTECTED, 6);
 	}
-
+	
 	//slSynch();
 }
 
 void			sdrv_vblank_rq(void)
 {
-	m68k_com->start = 1;
+	jo_printf(0, 0, "(%i)", m68k_com->start);
+	m68k_com->start = (m68k_com->start != 0xFFFF) ? 1 : m68k_com->start;
 }
 
 void			jo_main(void)
