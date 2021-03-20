@@ -49,7 +49,7 @@
 //Also the end of sound RAM
 #define PCMEND	(SNDRAM + 0x7F000)
 //////////////////////////////////////////////////////////////////////////////
-#define DRV_SYS_END (45 * 1024) //System defined safe end of driver's address space
+#define DRV_SYS_END (46 * 1024) //System defined safe end of driver's address space
 #define PCM_CTRL_MAX (64)
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)

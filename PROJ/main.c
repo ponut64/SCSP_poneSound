@@ -55,7 +55,7 @@ void	lead_function(void) //Link start to main
 //Place all includes past this line
 #define PCM_CTRL_MAX	(64)
 #define ADX_CTRL_MAX	(3)
-#define DRV_SYS_END		(45 * 1024) //System defined safe end of driver's address space
+#define DRV_SYS_END		(46 * 1024) //System defined safe end of driver's address space
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
 #define PCM_RVS_LOOP	(2)
@@ -63,6 +63,8 @@ void	lead_function(void) //Link start to main
 #define PCM_VOLATILE	(0)
 #define PCM_PROTECTED	(-1)
 #define PCM_SEMI		(-2)
+#define ADX_STREAM		(-3)
+#define ADX_STREAM_BUFFERED_FRAME_CT		(1024)
 //////////////////////////////////////////////////////////////////////////////
 #define PCM_TYPE_ADX (2) // 4-bit (compressed audio)
 #define PCM_TYPE_8BIT (1) // 8-bit
@@ -160,23 +162,25 @@ typedef struct {
 	short recharge_point;
 	short work_play_pt;
 	short work_decomp_pt;
-	short status;
+	volatile short status;
 	short pcm_number;
 	short current_frame;
 	short last_sample;
 	short last_last_sample;
+	short passed_buffers;
 	char	buf_string[2];
 	volatile short * dst;
 	volatile short * original_dst;
 	volatile unsigned short * src;
+	volatile unsigned short * original_src;
 } _ADX_CTRL; //Driver Local ADX Struct
 
 typedef struct{
-	unsigned short start; //System Start Boolean
-	unsigned short debug_state; //A region which the driver will write information about its state.
-	short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
-	short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
-	_PCM_CTRL * pcmCtrl;
+	volatile unsigned short start; //System Start Boolean
+	volatile short adx_stream_comm; //A region which the driver will write information about its state.
+	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
+	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
+	volatile _PCM_CTRL * pcmCtrl;
 } sysComPara;
 
 
@@ -249,7 +253,6 @@ void	driver_data_init(void)
 		sh2Com->pcmCtrl = (_PCM_CTRL *)((unsigned int)&pcmCtrlData[0] + 0x25A00000); 
 	//Set "start" to a specific number during start up to communicate the driver is initailizing.
 		sh2Com->start = 0xFFFF; 
-		sh2Com->debug_state = ('I' | ('N'<<8));
 	for(char i = 0; i < 32; i++)
 	{
 		ICSR_Busy[i] = -1;
@@ -270,7 +273,7 @@ void	driver_data_init(void)
 	{
 		adx_dummy[a] = PCM_CTRL_MAX + a;
 		adx[a].pcm_number = -1;
-		adx[a].status = 0;
+		adx[a].status = ADX_STATUS_NONE;
 		pcmCtrlData[adx_dummy[a]].loopType = 1; // fwd loop
 		pcmCtrlData[adx_dummy[a]].hiAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] >> 16);
 		pcmCtrlData[adx_dummy[a]].loAddrBits = (unsigned short)( (unsigned int)&adx_work_buf[0] & 0xFFFF);
@@ -570,9 +573,9 @@ void	play_adx(short pcm_control_index, short loop_type)
 	_PCM_CTRL * snd = &pcmCtrlData[pcm_control_index];
 	short target_adx = -1;
 	short buffers_empty = 0;
-		sh2Com->debug_state = adx[0].pcm_number;
-		sh2Com->drv_adx_coef_1 = adx[1].pcm_number;
-		sh2Com->drv_adx_coef_2 = adx[2].pcm_number;
+		// sh2Com->adx_stream_comm = adx[0].pcm_number;
+		// sh2Com->drv_adx_coef_1 = adx[1].pcm_number;
+		// sh2Com->drv_adx_coef_2 = adx[2].pcm_number;
 	///////////////////////////////////////
 	// ADX Condition Manager Selection
 	for(short f = 0; f < ADX_CTRL_MAX; f++)
@@ -742,13 +745,13 @@ void	play_adx(short pcm_control_index, short loop_type)
 	// ADX Play-type Condition Management
 	if(snd->sh2_permit == 1)
 	{
-		if(loop_type == PCM_SEMI || (loop_type == PCM_PROTECTED && adx[target_adx].status == ADX_STATUS_NONE))
+		if(loop_type == PCM_SEMI || (loop_type == PCM_PROTECTED && adx[target_adx].status == ADX_STATUS_ACTIVE))
 		{
-			//sh2Com->debug_state = ('A' | ('S'<<8));
+			//sh2Com->adx_stream_comm = ('A' | ('S'<<8));
 			if(loop_type == PCM_SEMI) snd->sh2_permit = 0;
 			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
-			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
-			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
+			//Decompression demand is the # of bytes to decompress every 1/60 seconds (60hz).
+			// + 64 must be added for margin ahead of the SCSP's playback. It is the size of 1 ADX frame.
 			adx[target_adx].decomp_demand = snd->bytes_per_blank + 64;
 			//Decompression space is the size of the playback buffer, in bytes.
 			adx[target_adx].decomp_space = snd->decompression_size;
@@ -756,30 +759,36 @@ void	play_adx(short pcm_control_index, short loop_type)
 			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
 			adx[target_adx].recharge_point = snd->decompression_size >> 1;
 			adx[target_adx].current_frame = 0;
+			adx[target_adx].original_src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
 			adx[target_adx].src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
 			adx[target_adx].dst = adx[target_adx].original_dst;
 			adx[target_adx].work_decomp_pt = 0;
 			adx[target_adx].work_play_pt = 0;
 			adx[target_adx].last_sample = 0;
 			adx[target_adx].last_last_sample = 0;
-		} else if(loop_type == PCM_FWD_LOOP && adx[target_adx].status == ADX_STATUS_NONE)
+			adx[target_adx].passed_buffers = 0;
+			sh2Com->adx_stream_comm = 0;
+		} else if((loop_type == PCM_FWD_LOOP || loop_type == ADX_STREAM) && adx[target_adx].status == ADX_STATUS_ACTIVE)
 		{
 			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
-			//Decompresion demand is the # of bytes to decompress every 1/60 seconds (60hz).
-			// + 64 must be added for magain ahead of the SCSP's playback. It is the size of 1 ADX frame.
+			//Decompression demand is the # of bytes to decompress every 1/60 seconds (60hz).
+			// + 64 must be added for margin ahead of the SCSP's playback. It is the size of 1 ADX frame.
 			adx[target_adx].decomp_demand = snd->bytes_per_blank + 64;
 			//Decompression space is the size of the playback buffer, in bytes.
 			adx[target_adx].decomp_space = snd->decompression_size;
 			//Recharge point is the point at which decompression will start.
 			//It is compared against a value to which the bytes per blank is added every 1/60 seconds.
 			adx[target_adx].recharge_point = snd->decompression_size >> 1;
-			adx[target_adx].current_frame = 0;
+			adx[target_adx].current_frame = (loop_type == ADX_STREAM) ? 2 : 0;
+			adx[target_adx].original_src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
 			adx[target_adx].src = (unsigned short *)((int)((snd->hiAddrBits<<16) | (snd->loAddrBits)));
 			adx[target_adx].dst = adx[target_adx].original_dst;
 			adx[target_adx].work_decomp_pt = 0;
 			adx[target_adx].work_play_pt = 0;
 			adx[target_adx].last_sample = 0;
 			adx[target_adx].last_last_sample = 0;
+			adx[target_adx].passed_buffers = 0;
+			sh2Com->adx_stream_comm = 0;
 		}
 	}
 	//If this function attempted to run past this point to manage an ADX sound without a valid ICSR,
@@ -803,7 +812,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 	// On the next refresh cycle, the driver will undergo decompression of more data, as the buffer is not full.
 	if(adx[target_adx].status & ADX_STATUS_START)
 	{
-		//sh2Com->debug_state = ('S' | ('T'<<8));
+		//sh2Com->adx_stream_comm = ('S' | ('T'<<8));
 		//Decompress (decomp_demand) # of bytes to (dst)
 		//Then start playing the sound
 		for(short i = 0; i < adx[target_adx].decomp_demand; )
@@ -843,10 +852,17 @@ void	play_adx(short pcm_control_index, short loop_type)
 			{
 				adx[target_adx].status |= ADX_STATUS_FULL;
 				break;
+			} 
+			if(loop_type == ADX_STREAM && adx[target_adx].current_frame >= (ADX_STREAM_BUFFERED_FRAME_CT * adx[target_adx].passed_buffers))
+			{
+				sh2Com->adx_stream_comm = 0;
+				adx[target_adx].passed_buffers++;
+				adx[target_adx].src = adx[target_adx].original_src;
 			}
 			decompress_adx_frame(&adx[target_adx]);
 			i += 64;
 			adx[target_adx].current_frame += 1;
+			sh2Com->adx_stream_comm += 1;
 		}
 		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 	}
@@ -923,6 +939,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		}
 		adx[target_adx].status = ADX_STATUS_NONE;
 		adx[target_adx].pcm_number = -1;
+		adx[target_adx].passed_buffers = 0;
 		driver_end_sound(&snd->icsr_target, &pcmCtrlData[adx_dummy[target_adx]]);
 		driver_end_sound(&snd->icsr_target, snd);
 	}
@@ -1060,7 +1077,7 @@ void	_start(void)
 	while(1){
 		//
 		do{
-			//sh2Com->debug_state = ('W' | ('A'<<8));
+			//sh2Com->adx_stream_comm = ('W' | ('A'<<8));
 			if(sh2Com->start == 1) break;
 		}while(1);
 			sh2Com->start = 0;
