@@ -413,10 +413,10 @@ void	driver_end_sound(volatile char * cst, _PCM_CTRL * lctrl)
 {
 	csr[*cst].keys = (0); //Key select OFF
 	csr[*cst].keys |= 1<<12; //Key EXECUTE OFF
-	lctrl->sh2_permit = 0; 
-	lctrl->icsr_target = -1;
 	ICSR_Busy[*cst] = -1; //Flag this ICSR as no longer busy
 	dataTimers[*cst] = 0; //Clear playback timer
+	lctrl->sh2_permit = 0; 
+	lctrl->icsr_target = -1;
 }
 
 void	driver_stop_slot(volatile char * cst)
