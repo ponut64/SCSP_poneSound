@@ -257,6 +257,19 @@ void	driver_data_init(void)
 	{
 		ICSR_Busy[i] = -1;
 		dataTimers[i] = 0;
+		//Soft-reset safety clear of sound slot information; contribued by fafling
+		csr[i].keys					= 0;
+		csr[i].start_addr			= 0;
+		csr[i].loop_start			= 0;
+		csr[i].playsize				= 0;
+		csr[i].decay_1_2_attack		= 0;
+		csr[i].key_decay_release	= 0;
+		csr[i].attenuation			= 0;
+		csr[i].FM_data				= 0;
+		csr[i].oct_fns				= 0;
+		csr[i].lfo_data				= 0;
+		csr[i].input_sel			= 0;
+		csr[i].pan_send				= 0;
 	}
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
@@ -363,9 +376,9 @@ for (short i = 0; i < 8; i++)
 	delta4 = scale_table[sample_short & 0xF];
 	////////////////////////////////////////////////////////////////////////////////////////////
 	//The data of hist1 is kept, so use another register.
-	histi = center_coef_1[hist1]; //We do not need to check the histories for their sign, as the tables themsselves are signed.
+	histi = center_coef_1[hist1]; //We do not need to check the histories for their sign, as the tables themselves are signed.
 	//The data of hist2 is discarded, so use the same register.
-	hist2 = center_coef_2[hist2]; //We do not need to check the histories for their sign, as the tables themsselves are signed.
+	hist2 = center_coef_2[hist2]; //We do not need to check the histories for their sign, as the tables themselves are signed.
 	sample_raw = histi + hist2 + delta1;
 	sample_raw = (sample_raw > 32767) ? 32767 : (sample_raw < -32768) ? -32768 : sample_raw;
 	hist2 = hist1;
