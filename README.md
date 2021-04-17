@@ -1,7 +1,7 @@
 # 68k
 SEGA Saturn SCSP Command & Control Driver and Linked Library
 by Ponut64
-Hitherto otherwise known as "poneSound"
+Hitherto otherwise known as "ponèSound"
 
 Currently supports playback of uncompressed 8-bit signed and 16-bit big-endian signed raw audio samples of up to 65536 samples in size. That would make 64KB the largest 8-bit raw size, and 128kb the largest 16-bit raw size.
 
