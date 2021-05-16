@@ -10,7 +10,7 @@ The channel allowance is as follows:
 1 23040 Hz, 
 1 15360 Hz + 1 7680 Hz, 
 2 11520 Hz, 
-1 1150Hz + 1 7680 Hz, 
+1 11520Hz + 1 7680 Hz, 
 3 7680 Hz 
 
 The driver and linked library does not currently accomodate PCM streams nor does it provide abstractions for stereo playback.
