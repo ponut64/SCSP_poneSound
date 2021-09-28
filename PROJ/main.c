@@ -98,7 +98,7 @@ void	lead_function(void) //Link start to main
 			EFSDL: Effect send level [???]
 			EFPAN: Effect pan level [MSB: Left/right boolean, bits 0-4: distance from center]
 			..
-			For FM sound source, there are a lot more things to set outside of the indiviual commmand.
+			For FM sound source, there are a lot more things to set outside of the individual command.
 		BIG ENDIAN														Byte+1
 INTEGER	|---MSB--------------------------------------------------------------------------------------------------------------------LSB--|
 	BIT	|	15	|	14	|	13	|	12	|	11	|	10	|	9	|	8	|	7	|	6	|	5	|	4	|	3	|	2	|	1	|	0	|
@@ -175,9 +175,9 @@ typedef struct {
 	volatile unsigned short * original_src;
 } _ADX_CTRL; //Driver Local ADX Struct
 
-typedef struct{
+typedef struct {
 	volatile unsigned short start; //System Start Boolean
-	volatile short adx_stream_comm; //A region which the driver will write information about its state.
+	volatile char	adx_buffer_pass[2]; //Booleans
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
 	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	volatile _PCM_CTRL * pcmCtrl;
@@ -257,7 +257,7 @@ void	driver_data_init(void)
 	{
 		ICSR_Busy[i] = -1;
 		dataTimers[i] = 0;
-		//Soft-reset safety clear of sound slot information; contribued by fafling
+		//Soft-reset safety clear of sound slot information; contributed by fafling
 		csr[i].keys					= 0;
 		csr[i].start_addr			= 0;
 		csr[i].loop_start			= 0;
@@ -780,7 +780,8 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].last_sample = 0;
 			adx[target_adx].last_last_sample = 0;
 			adx[target_adx].passed_buffers = 0;
-			sh2Com->adx_stream_comm = 0;
+			sh2Com->adx_buffer_pass[0] = 0;
+			sh2Com->adx_buffer_pass[1] = 0;
 		} else if((loop_type == PCM_FWD_LOOP || loop_type == ADX_STREAM) && adx[target_adx].status == ADX_STATUS_ACTIVE)
 		{
 			adx[target_adx].status = (ADX_STATUS_START | ADX_STATUS_ACTIVE);
@@ -801,7 +802,8 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].last_sample = 0;
 			adx[target_adx].last_last_sample = 0;
 			adx[target_adx].passed_buffers = 0;
-			sh2Com->adx_stream_comm = 0;
+			sh2Com->adx_buffer_pass[0] = 0;
+			sh2Com->adx_buffer_pass[1] = 0;
 		}
 	}
 	//If this function attempted to run past this point to manage an ADX sound without a valid ICSR,
@@ -866,16 +868,24 @@ void	play_adx(short pcm_control_index, short loop_type)
 				adx[target_adx].status |= ADX_STATUS_FULL;
 				break;
 			} 
-			if(loop_type == ADX_STREAM && adx[target_adx].current_frame >= (ADX_STREAM_BUFFERED_FRAME_CT * adx[target_adx].passed_buffers))
+			if(loop_type == ADX_STREAM)
 			{
-				sh2Com->adx_stream_comm = 0;
+				int frames_from_segment = (ADX_STREAM_BUFFERED_FRAME_CT * (adx[target_adx].passed_buffers + 1));
+				if(adx[target_adx].current_frame == frames_from_segment)
+				{
+				sh2Com->drv_adx_coef_1 = 0;
+				sh2Com->adx_buffer_pass[1] = 1; //Communicate to stream manager software on SH2 that segment 1 (loop point) has passed.
 				adx[target_adx].passed_buffers++;
 				adx[target_adx].src = adx[target_adx].original_src;
+				} else if(adx[target_adx].current_frame == (frames_from_segment - (ADX_STREAM_BUFFERED_FRAME_CT>>1)))
+				{
+				sh2Com->adx_buffer_pass[0] = 1; //Communicate to stream manager software on SH2 that segment 0 (half-way point) is passed.
+				}
 			}
 			decompress_adx_frame(&adx[target_adx]);
 			i += 64;
 			adx[target_adx].current_frame += 1;
-			sh2Com->adx_stream_comm += 1;
+			sh2Com->drv_adx_coef_1 += 1;
 		}
 		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 	}
