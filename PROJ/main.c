@@ -945,6 +945,11 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].status = ADX_STATUS_END;
 			}
 		}
+		////////////////////////////////////////
+		// ADX Parameter / Volume Update
+		// Do this here for playing sounds.
+		// We should not need to update the ADX Dummy with this information here, since the next time it is used, it will update.
+		csr[snd->icsr_target].pan_send = ((snd->volume<<13) | (snd->pan<<8));
 	}
 
 	///////////////////////////////////////
@@ -953,7 +958,9 @@ void	play_adx(short pcm_control_index, short loop_type)
 	// Control data from the ADX dummy, ADX PCM control, and ADX control struct is cleared.
 	// In all cases, it is acceptable to indicate that the SH2 no longer permits the sound as looping conditions happen earlier.
 	// However, it's not always needed.
-	if(adx[target_adx].status & ADX_STATUS_END || loop_type == ADX_STATUS_NONE)
+	// This is the control area which stops sounds which must be prematurely stopped (in case of being commanded to stop).
+	if(adx[target_adx].status & ADX_STATUS_END || loop_type == ADX_STATUS_NONE ||
+		((loop_type == PCM_FWD_LOOP || loop_type == PCM_PROTECTED) && snd->sh2_permit == 0))
 	{
 		snd->sh2_permit = 0;
 		for(short s = adx[target_adx].buf_string[0]; s <= adx[target_adx].buf_string[1]; s++)
