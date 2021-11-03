@@ -191,12 +191,11 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1);
+	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1)-1;
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, false, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_16BIT; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
-
 
 	numberPCMs++; //Increment pcm #
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
@@ -232,7 +231,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size);
+	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size)-1;
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, true, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_8BIT; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
@@ -325,7 +324,7 @@ short	add_raw_pcm_buffer(bool is8Bit, short sampleRate, int size)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (size);
+	m68k_com->pcmCtrl[numberPCMs].playsize = (size)-1;
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, is8Bit, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = (is8Bit) ? PCM_TYPE_8BIT : PCM_TYPE_16BIT;
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
