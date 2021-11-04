@@ -1,7 +1,6 @@
 
 #include <jo/jo.h>
 #include "pcmsys.h"
-#include <SEGA_INT.h>
 
 int framerate;
 
