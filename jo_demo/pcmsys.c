@@ -53,7 +53,24 @@ static const int logtbl[] = {
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
-
+	
+/**stolen from xl2**/
+#define     OPEN_MAX    (Sint32)5
+#define     DIR_MAX     (Sint32)25
+#define     RD_UNIT     (10)
+#define     SECT_SIZE   (2048)
+GfsDirTbl gfsDirTbl;
+GfsDirName gfsDirName[DIR_MAX];
+Uint32 gfsLibWork[GFS_WORK_SIZE(OPEN_MAX)/sizeof(Uint32)];
+Sint32 gfsDirN;
+void    cd_init(void)
+{
+    GFS_DIRTBL_TYPE(&gfsDirTbl) = GFS_DIR_NAME;
+    GFS_DIRTBL_DIRNAME(&gfsDirTbl) = gfsDirName;
+    GFS_DIRTBL_NDIR(&gfsDirTbl) = DIR_MAX;
+    gfsDirN = GFS_Init(OPEN_MAX, gfsLibWork, &gfsDirTbl);
+}
+	
 void smpc_wait_till_ready (void)
 {
    // Wait until SF register is cleared
@@ -75,7 +92,7 @@ void smpc_issue_command(unsigned char cmd)
 
 void	load_driver_binary(Sint8 * filename, void * buffer, int master_adx_frequency)
 {
-
+	cd_init();
 	GfsHn s_gfs;
 	Sint32 file_size;
 	
@@ -191,11 +208,12 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1)-1;
+	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size>>1);
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, false, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_16BIT; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Initialize as max volume
+
 
 	numberPCMs++; //Increment pcm #
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
@@ -231,7 +249,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size)-1;
+	m68k_com->pcmCtrl[numberPCMs].playsize = (file_size);
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, true, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_8BIT; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
@@ -240,7 +258,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 
 	numberPCMs++; //Increment pcm #
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + file_size);
-	return (numberPCMs-1); //Return the PCM # this sound recieved
+	return (numberPCMs-1); //Return the PCM # this sound received
 }
 
 // Recursive function to return gcd of a and b 
@@ -324,14 +342,14 @@ short	add_raw_pcm_buffer(bool is8Bit, short sampleRate, int size)
 	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
 	
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (size)-1;
+	m68k_com->pcmCtrl[numberPCMs].playsize = (is8Bit) ? size : size>>1;
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, is8Bit, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = (is8Bit) ? PCM_TYPE_8BIT : PCM_TYPE_16BIT;
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
 	numberPCMs++;
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + size);
-	return (numberPCMs-1); //Return the PCM # this sound recieved
+	return (numberPCMs-1); //Return the PCM # this sound received
 }
 
 void	pcm_play(short pcmNumber, char ctrlType, char volume)
@@ -357,4 +375,12 @@ void	pcm_cease(short pcmNumber)
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; //If it is a looping sound, the control method is to command it to stop.
 	}
 }
+
+void		sdrv_vblank_rq(void)
+{
+	jo_printf(0, 0, "drv_stat(%i)", m68k_com->start);
+	m68k_com->start = 1;	
+}
+
+
 

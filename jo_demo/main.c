@@ -56,12 +56,6 @@ void			my_draw(void)
 	//slSynch();
 }
 
-void			sdrv_vblank_rq(void)
-{
-	jo_printf(0, 0, "(%i)", m68k_com->start);
-	m68k_com->start = (m68k_com->start != 0xFFFF) ? 1 : m68k_com->start;
-}
-
 void			jo_main(void)
 {
 	jo_core_init(JO_COLOR_Black);

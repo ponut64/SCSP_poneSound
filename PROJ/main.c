@@ -55,7 +55,7 @@ void	lead_function(void) //Link start to main
 //Place all includes past this line
 #define PCM_CTRL_MAX	(64)
 #define ADX_CTRL_MAX	(3)
-#define DRV_SYS_END		(46 * 1024) //System defined safe end of driver's address space
+#define DRV_SYS_END		(47 * 1024) //System defined safe end of driver's address space
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
 #define PCM_RVS_LOOP	(2)
@@ -127,7 +127,10 @@ typedef struct{
 	unsigned short	keys;
 	unsigned short	start_addr;
 	unsigned short	loop_start;
-	unsigned short	playsize;
+	// IMPORTANT NOTICE: The SCSP actually plays 1 more sample than this number, even in a loop.
+	// This is probably due to pipelining: The SCSP processes 1 sample while reading the next sample.
+	// It won't get the correct condition for the final sample played because the condition for the previous sample is processed on the next.
+	unsigned short	playsize; 
 	unsigned short	decay_1_2_attack;
 	unsigned short	key_decay_release;
 	unsigned short	attenuation;
@@ -164,10 +167,11 @@ typedef struct {
 	short work_decomp_pt;
 	volatile short status;
 	short pcm_number;
-	short current_frame;
+	unsigned int current_frame;
+	unsigned short whippet_frame;
 	short last_sample;
 	short last_last_sample;
-	short passed_buffers;
+	unsigned short passed_buffers;
 	char	buf_string[2];
 	volatile short * dst;
 	volatile short * original_dst;
@@ -176,6 +180,7 @@ typedef struct {
 } _ADX_CTRL; //Driver Local ADX Struct
 
 typedef struct {
+	volatile unsigned int adx_stream_length; //Length of the ADX stream (in ADX frames)
 	volatile unsigned short start; //System Start Boolean
 	volatile char	adx_buffer_pass[2]; //Booleans
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
@@ -460,7 +465,7 @@ void	driver_start_slot_with_sound(volatile char * cst, _PCM_CTRL * lctrl)
 	csr[*cst].keys = (1<<11 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | Bit depth | high bits of address
 	csr[*cst].start_addr = lctrl->loAddrBits;
 	csr[*cst].loop_start = lctrl->LSA;
-	csr[*cst].playsize = lctrl->playsize;
+	csr[*cst].playsize = lctrl->playsize-1; // "-1" to correct for the SCSP's pipeline. Helps that the linked library won't have to worry.
 	csr[*cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[*cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
@@ -802,8 +807,13 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].last_sample = 0;
 			adx[target_adx].last_last_sample = 0;
 			adx[target_adx].passed_buffers = 0;
-			sh2Com->adx_buffer_pass[0] = 0;
-			sh2Com->adx_buffer_pass[1] = 0;
+			// For an ADX STREAM, flag the buffers as having been passed. This is essentially marking them as empty.
+			// If the linked library sees the buffers empty, it should copy in new data.
+			if(loop_type == ADX_STREAM)
+			{
+			sh2Com->adx_buffer_pass[0] = 1;
+			sh2Com->adx_buffer_pass[1] = 1;
+			}
 		}
 	}
 	//If this function attempted to run past this point to manage an ADX sound without a valid ICSR,
@@ -838,7 +848,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		}
 		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 		//ADX dummy 1 being a looping PCM control set to point at the adx work buf.
-		pcmCtrlData[adx_dummy[target_adx]].playsize = (adx[target_adx].decomp_space)>>1;
+		pcmCtrlData[adx_dummy[target_adx]].playsize = ((adx[target_adx].decomp_space)>>1)-1;
 		pcmCtrlData[adx_dummy[target_adx]].pitchword = snd->pitchword;
 		pcmCtrlData[adx_dummy[target_adx]].bytes_per_blank = snd->bytes_per_blank;
 		pcmCtrlData[adx_dummy[target_adx]].pan = snd->pan;
@@ -856,42 +866,65 @@ void	play_adx(short pcm_control_index, short loop_type)
 		// An ADX "frame" is 18 bytes which contains 64 4-bit nibbles and 1 16-bit scale value.
 		// It should be noted, if it wasn't clear already, that your sound's byterate must be divisible by 64.
 		// The amount of frames decompressed is the 60hz byterate of the raw PCM frequency, divided by 64, plus 1.
-		for(short i = 0; i < adx[target_adx].decomp_demand; )
+		for(unsigned short i = 0; i < adx[target_adx].decomp_demand; )
 		{
 			///////////////////////////////////////
 			// ADX Decompression Completion Condition
 			// The playsize of the ADX PCM control slot contains the # of ADX frames of the sound.
 			// If the current frame being decompressed is greater than this, the sound has been fully decompressed.
 			// The status is updated as such, and no more ADX frames are to be decompressed (there are no more!).
-			if(adx[target_adx].current_frame > snd->playsize)
+			if(adx[target_adx].current_frame > snd->playsize && loop_type != ADX_STREAM)
 			{
 				adx[target_adx].status |= ADX_STATUS_FULL;
 				break;
-			} 
-			if(loop_type == ADX_STREAM)
+			} else if(loop_type == ADX_STREAM)
 			{
 				int frames_from_segment = (ADX_STREAM_BUFFERED_FRAME_CT * (adx[target_adx].passed_buffers + 1));
 				if(adx[target_adx].current_frame == frames_from_segment)
 				{
-				sh2Com->drv_adx_coef_1 = 0;
-				sh2Com->adx_buffer_pass[1] = 1; //Communicate to stream manager software on SH2 that segment 1 (loop point) has passed.
-				adx[target_adx].passed_buffers++;
-				adx[target_adx].src = adx[target_adx].original_src;
+					sh2Com->adx_buffer_pass[1] = 1; //Communicate to stream manager software on SH2 that segment 1 (loop point) has passed.
+					adx[target_adx].passed_buffers++;
+					adx[target_adx].src = adx[target_adx].original_src;
 				} else if(adx[target_adx].current_frame == (frames_from_segment - (ADX_STREAM_BUFFERED_FRAME_CT>>1)))
 				{
-				sh2Com->adx_buffer_pass[0] = 1; //Communicate to stream manager software on SH2 that segment 0 (half-way point) is passed.
+					sh2Com->adx_buffer_pass[0] = 1; //Communicate to stream manager software on SH2 that segment 0 (half-way point) is passed.
+				}
+				if(adx[target_adx].current_frame > sh2Com->adx_stream_length)
+				{
+					adx[target_adx].status |= ADX_STATUS_FULL;
+					break;
 				}
 			}
 			decompress_adx_frame(&adx[target_adx]);
 			i += 64;
 			adx[target_adx].current_frame += 1;
-			sh2Com->drv_adx_coef_1 += 1;
 		}
 		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 	}
 
 	if(adx[target_adx].status & ADX_STATUS_PLAY)
 	{
+		////////////////////////////////////////
+		//
+		// The Whippet
+		// Honestly, this is an imprecise piece of the equation.
+		// This is needed because the SCSP consumes data at a rate slower than bytes_per_blank.
+		// It does that because the SCSP's clock rate is effectively tuned to 44.1KHz audio.
+		// The rates we use to attempt to get perfect numbers of bytes per vertical blank don't equate perfectly to the SCSP's clock rate.
+		// However, I could not manage to get a correct calculation for the actual rate at which the SCSP will consume data.
+		// We still need to compensate for this flaw that our code assumes perfect bytes consumed per blank.
+		// We have a pretty big buffer, so there's decent margin for error.
+		// This code just assumes every time the # of blanks pass that equate to the number of bytes consumed every blank,
+		// that we should assume the SCSP has consumed one less blank of bytes. 
+		// Yet, we **add** to the bytes per blank? Yes! It works! Don't ask!
+		//
+		adx[target_adx].whippet_frame += 1;
+		if(adx[target_adx].whippet_frame >= snd->bytes_per_blank)
+		{
+			adx[target_adx].work_play_pt += snd->bytes_per_blank;
+			adx[target_adx].whippet_frame = 0;
+		}
+		sh2Com->drv_adx_coef_1 = adx[target_adx].whippet_frame;
 		adx[target_adx].work_play_pt += snd->bytes_per_blank;
 		///////////////////////////////////////
 		// ADX Decompression Starting
@@ -966,6 +999,13 @@ void	play_adx(short pcm_control_index, short loop_type)
 		for(short s = adx[target_adx].buf_string[0]; s <= adx[target_adx].buf_string[1]; s++)
 		{
 			adx_buffer_used[s] = 0;
+		}
+		// When an ADX stream ends, the appropriate logic is to flag both buffers as having been passed.
+		// This is just to cover logical flaws in the linked library.
+		if(loop_type == ADX_STREAM)
+		{
+		sh2Com->adx_buffer_pass[0] = 1;
+		sh2Com->adx_buffer_pass[1] = 1;
 		}
 		adx[target_adx].status = ADX_STATUS_NONE;
 		adx[target_adx].pcm_number = -1;

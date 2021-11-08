@@ -49,7 +49,7 @@
 //Also the end of sound RAM
 #define PCMEND	(SNDRAM + 0x7F000)
 //////////////////////////////////////////////////////////////////////////////
-#define DRV_SYS_END (46 * 1024) //System defined safe end of driver's address space
+#define DRV_SYS_END (47 * 1024) //System defined safe end of driver's address space
 #define PCM_CTRL_MAX (64)
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
@@ -58,6 +58,7 @@
 #define PCM_VOLATILE	(0)
 #define PCM_PROTECTED	(-1)
 #define PCM_SEMI		(-2)
+#define ADX_STREAM		(-3)
 //////////////////////////////////////////////////////////////////////////////
 #define PCM_TYPE_ADX (2) // 4-bit (compressed audio)
 #define PCM_TYPE_8BIT (1) // 8-bit
@@ -102,12 +103,13 @@ typedef struct {
 	char icsr_target; //Which explicit ICSR is this to land in? Can be controlled by SH2 or by driver.
 } _PCM_CTRL; //Driver Local Command Struct
 
-typedef struct{
-	unsigned short start; //System Start Boolean
-	unsigned short debug_state; //A region which the driver will write information about its state.
-	short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
-	short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
-	_PCM_CTRL * pcmCtrl;
+typedef struct {
+	volatile unsigned int adx_stream_length; //Length of the ADX stream (in ADX frames)
+	volatile unsigned short start; //System Start Boolean
+	volatile char	adx_buffer_pass[2]; //Booleans
+	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
+	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
+	volatile _PCM_CTRL * pcmCtrl;
 } sysComPara;
 
 typedef struct {
@@ -125,11 +127,17 @@ typedef struct {
 } adx_header;
 
 //
+
+//
 extern	sysComPara * m68k_com;
 extern	unsigned int * scsp_load;
 extern unsigned short * master_volume;
 extern short numberPCMs;
 //
+extern void (*file_handler_function)(void *);
+extern Sint32 music_file_sys_id;
+extern Sint32 generic_file_sys_id;
+extern bool file_setup_requested;
 
 void smpc_wait_till_ready(void);
 void smpc_issue_command(unsigned char cmd);
@@ -141,6 +149,8 @@ void	load_drv(int master_adx_frequency);
 void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);
 void	pcm_cease(short pcmNumber);
+
+void	sdrv_vblank_rq(void);
 
 #endif
 
