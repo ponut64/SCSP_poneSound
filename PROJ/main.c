@@ -573,7 +573,7 @@ void	set_looping_sound(short index)
 	csr[cst].keys = (1<<11 | lctrl->loopType<<5 | lctrl->bitDepth<<4 | lctrl->hiAddrBits); //Key select ON | loop type | Bit depth | high bits of address
 	csr[cst].start_addr = lctrl->loAddrBits;
 	csr[cst].loop_start = lctrl->LSA;
-	csr[cst].playsize = lctrl->playsize;
+	csr[cst].playsize = lctrl->playsize-1;
 	csr[cst].oct_fns = lctrl->pitchword; //It would be possible to include a pseudorandom table to randomize the pitch slightly.
 										//The octave is in this word, so that's what you would change for randomized pitch. +1 or -1.
 	csr[cst].pan_send = ((lctrl->volume<<13) | (lctrl->pan<<8));
@@ -848,7 +848,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		}
 		adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
 		//ADX dummy 1 being a looping PCM control set to point at the adx work buf.
-		pcmCtrlData[adx_dummy[target_adx]].playsize = ((adx[target_adx].decomp_space)>>1)-1;
+		pcmCtrlData[adx_dummy[target_adx]].playsize = ((adx[target_adx].decomp_space)>>1);
 		pcmCtrlData[adx_dummy[target_adx]].pitchword = snd->pitchword;
 		pcmCtrlData[adx_dummy[target_adx]].bytes_per_blank = snd->bytes_per_blank;
 		pcmCtrlData[adx_dummy[target_adx]].pan = snd->pan;
