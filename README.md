@@ -13,9 +13,20 @@ The channel allowance is as follows:
 1 11520Hz + 1 7680 Hz, 
 3 7680 Hz 
 
-The driver and linked library does not currently accomodate PCM streams nor does it provide abstractions for stereo playback.
+The driver has two linked libraries.
+Primarily there is pcmsys.c and pcmsys.h ; these are the files needed for general sound playback.
+Additionally, there is pcmstm.c and pcmstm.h ; these are the files needed for streaming audio.
+With pcmstm.c, one channel of PCM can be streamed at up to 30720, mono, 8-bit with an ADX stream.
+The ADX stream can be up to 23040, mono. 
+It's important to note that due to the low buffer size, the ADX stream starts playback quickly.
+It therefore carries some relevance for use in general sound design (like, for voice lines).
+However, the raw PCM stream takes significant time to buffer.
 
-The linked library is included in the jo_demo folder, which contains a readily compilable demo for the latest Jo Engine release.
+It should be noted that _if you can find a way to use it_, CDDA (Redbook) makes **much** more efficient use of the Saturn's CD drive if you want the highest quality music.
+
+There are two seprate usage demos:
+jo_demo, which is for the general-basic functions in pcmsys.c/h.
+jo_stream_demo, which is a demonstration of the streaming libraries.
 
 Linker script from CyberWarriorX
 
