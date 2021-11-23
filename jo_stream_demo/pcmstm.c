@@ -47,10 +47,11 @@ void	stop_pcm_stream(void)
 // This function is for premature stoppage of the sound.
 void		stop_adx_stream(void)
 {
-	
+		if(adx_stream.active)
+		{
 	m68k_com->pcmCtrl[adx_stream.pcm_number].sh2_permit = 0;
 	adx_stream.request_stop = 1;
-	
+		}
 }
 
 //
@@ -415,6 +416,8 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 			{
 				buf.setup_requested = true;
 				stm.restarting = false;
+				stm.playing = false;
+				pcm_cease(stm.pcm_num);
 			} else {
 				stm.playing = false;
 				pcm_cease(stm.pcm_num);
