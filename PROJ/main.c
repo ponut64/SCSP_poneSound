@@ -855,6 +855,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		pcmCtrlData[adx_dummy[target_adx]].volume = snd->volume;
 		pcmCtrlData[adx_dummy[target_adx]].icsr_target = snd->icsr_target;
 		pcmCtrlData[adx_dummy[target_adx]].loAddrBits = (unsigned short)((unsigned int)adx[target_adx].original_dst);
+		adx[target_adx].whippet_frame = 0;
 		set_looping_sound(adx_dummy[target_adx]);
 		adx[target_adx].status ^= ADX_STATUS_START;
 		adx[target_adx].status |= (ADX_STATUS_PLAY | ADX_STATUS_DECOMP);
@@ -993,7 +994,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 	// However, it's not always needed.
 	// This is the control area which stops sounds which must be prematurely stopped (in case of being commanded to stop).
 	if(adx[target_adx].status & ADX_STATUS_END || loop_type == ADX_STATUS_NONE ||
-		((loop_type == PCM_FWD_LOOP || loop_type == PCM_PROTECTED) && snd->sh2_permit == 0))
+		((loop_type != PCM_SEMI) && snd->sh2_permit == 0))
 	{
 		snd->sh2_permit = 0;
 		for(short s = adx[target_adx].buf_string[0]; s <= adx[target_adx].buf_string[1]; s++)

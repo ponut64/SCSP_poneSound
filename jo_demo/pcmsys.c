@@ -54,6 +54,30 @@ static const int logtbl[] = {
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
 	
+void	pcm_play(short pcmNumber, char ctrlType, char volume)
+{
+	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
+	m68k_com->pcmCtrl[pcmNumber].volume = volume;
+	m68k_com->pcmCtrl[pcmNumber].loopType = ctrlType;
+}
+
+void	pcm_parameter_change(short pcmNumber, char volume, char pan)
+{
+	m68k_com->pcmCtrl[pcmNumber].volume = volume;
+	m68k_com->pcmCtrl[pcmNumber].pan = pan;
+}
+
+void	pcm_cease(short pcmNumber)
+{
+
+	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0) //If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
+	{												//Protected sounds have a permission state of "until they end".
+	m68k_com->pcmCtrl[pcmNumber].volume = 0;
+	} else {
+	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; //If it is a looping sound, the control method is to command it to stop.
+	}
+}
+	
 /**stolen from xl2**/
 #define     OPEN_MAX    (Sint32)5
 #define     DIR_MAX     (Sint32)25
@@ -262,7 +286,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 }
 
 // Recursive function to return gcd of a and b 
-short gcd(short a, short b) 
+inline short gcd(short a, short b) 
 { 
     if (a == 0)
         return b; 
@@ -271,7 +295,7 @@ short gcd(short a, short b)
  
 // Function to return LCM of two numbers 
 // Used specifically to find the buffer size for ADX sound effects
-short lcm(short a, short b) 
+inline short lcm(short a, short b) 
 { 
     return (a / gcd(a, b)) * b;
 } 
@@ -333,54 +357,9 @@ short		load_adx(Sint8 * filename)
 	return (numberPCMs-1); //Return the PCM # this sound recieved
 }
 
-short	add_raw_pcm_buffer(bool is8Bit, short sampleRate, int size)
-{
-	
-	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
-	
-	m68k_com->pcmCtrl[numberPCMs].hiAddrBits = (unsigned short)( (unsigned int)scsp_load >> 16);
-	m68k_com->pcmCtrl[numberPCMs].loAddrBits = (unsigned short)( (unsigned int)scsp_load & 0xFFFF);
-	
-	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(sampleRate);
-	m68k_com->pcmCtrl[numberPCMs].playsize = (is8Bit) ? size : size>>1;
-	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, is8Bit, PCM_SYS_REGION); //Iniitalize as max volume
-	m68k_com->pcmCtrl[numberPCMs].bitDepth = (is8Bit) ? PCM_TYPE_8BIT : PCM_TYPE_16BIT;
-	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
-	numberPCMs++;
-	scsp_load = (unsigned int *)((unsigned int )scsp_load + size);
-	return (numberPCMs-1); //Return the PCM # this sound received
-}
-
-void	pcm_play(short pcmNumber, char ctrlType, char volume)
-{
-	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
-	m68k_com->pcmCtrl[pcmNumber].volume = volume;
-	m68k_com->pcmCtrl[pcmNumber].loopType = ctrlType;
-}
-
-void	pcm_parameter_change(short pcmNumber, char volume, char pan)
-{
-	m68k_com->pcmCtrl[pcmNumber].volume = volume;
-	m68k_com->pcmCtrl[pcmNumber].pan = pan;
-}
-
-void	pcm_cease(short pcmNumber)
-{
-
-	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0) //If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
-	{												//Protected sounds have a permission state of "until they end".
-	m68k_com->pcmCtrl[pcmNumber].volume = 0;
-	} else {
-	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; //If it is a looping sound, the control method is to command it to stop.
-	}
-}
-
 void		sdrv_vblank_rq(void)
 {
-	jo_printf(0, 0, "drv_stat(%i)", m68k_com->start);
+	//jo_printf(0, 0, "drv_stat(%i)", m68k_com->start);
 	m68k_com->start = 1;	
 }
-
-
 

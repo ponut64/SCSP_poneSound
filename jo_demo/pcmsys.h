@@ -3,6 +3,9 @@
 //
 #ifndef __PCMSYS_H__
 # define __PCMSYS_H__
+
+///////////////
+// Likely duplicates from other libraries (in this case, taken from iapetus)
 //////////////////////////////////////////////////////////////////////////////
 
 #define SMPC_REG_IREG(i)        *((volatile unsigned char *)0x20100001+((i) * 2))
@@ -133,14 +136,22 @@ extern	sysComPara * m68k_com;
 extern	unsigned int * scsp_load;
 extern unsigned short * master_volume;
 extern short numberPCMs;
-//
-extern void (*file_handler_function)(void *);
-extern Sint32 music_file_sys_id;
-extern Sint32 generic_file_sys_id;
-extern bool file_setup_requested;
 
-void smpc_wait_till_ready(void);
-void smpc_issue_command(unsigned char cmd);
+//
+// System functions shared for pcmstm.c/h
+//
+short			convert_bitrate_to_pitchword(short sampleRate);
+short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL);
+
+//
+// These are likely to be duplicate commands from other libraries.
+//
+void	smpc_wait_till_ready(void);
+void	smpc_issue_command(unsigned char cmd);
+//
+//
+//
+
 short	load_16bit_pcm(Sint8 * filename, int sampleRate);
 short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 short	load_adx(Sint8 * filename);
