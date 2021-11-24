@@ -27,7 +27,7 @@ Note, unless the game code is operating within the "pcm_stream_host" function, t
 */
 void	start_pcm_stream(Sint8 * filename, int volume)
 {
-	
+		if(buf.operating || buf.setup_requested) return;
 	buf.file_id = GFS_NameToId(filename);
 	buf.setup_requested = true;
 	stm.volume = volume;
@@ -80,22 +80,6 @@ short	add_raw_pcm_buffer(bool is8Bit, short sampleRate, int size)
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + size);
 	return (numberPCMs-1); //Return the PCM # this sound received
 }
-
-
-// Recursive function to return gcd of a and b 
-inline short gcd(short a, short b) 
-{ 
-    if (a == 0)
-        return b; 
-    return gcd(b % a, a); 
-} 
- 
-// Function to return LCM of two numbers 
-// Used specifically to find the buffer size for ADX sound effects
-inline short lcm(short a, short b) 
-{ 
-    return (a / gcd(a, b)) * b;
-} 
 
 /*
 	This function adds an ADX entry to the PCM CTRL list and allocates an 18KB front-buffer in sound RAM to play it back from.
@@ -350,6 +334,8 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 	static Sint32 bytes_read_now;
 	static Sint32 byte_dummy;
 
+	cd_init();
+
 	while(1)
 	{
 	//Main system loop - system doesn't break away from this.
@@ -380,17 +366,17 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 		{
 				game_code();
 			/////////////
+					jo_printf(16, 2, "--SETM--");
 			buf.file_handle = GFS_Open(buf.file_id);
-			
 			/*
 				In testing, it has been found that these lines are _strictly necessary_ for this to work.
 				SetReadPara sets the bytes per request to be retrieved from CD to the CD block buffer.
 				SetTransPara sets the sectors per request to be transferred from the CD block buffer to system addressable memory.
 				SetTmode sets the DMA channel to be used for the request. We set SDMA1 specifically. SDMA0 can be used.
 			*/
-			GFS_SetReadPara(buf.file_handle, buf.buffer_size_bytes);
-			GFS_SetTransPara(buf.file_handle, buf.transfer_sectors);
-			GFS_SetTmode(buf.file_handle, GFS_TMODE_SDMA0);
+			//GFS_SetReadPara(buf.file_handle, buf.buffer_size_bytes);
+			//GFS_SetTransPara(buf.file_handle, buf.transfer_sectors);
+			//GFS_SetTmode(buf.file_handle, GFS_TMODE_SDMA0);
 			
 			GFS_GetFileInfo(buf.file_handle, NULL, NULL, &buf.total_bytes, NULL);
 			stm.total_blanks = buf.total_bytes / (int)m68k_com->pcmCtrl[stm.pcm_num].bytes_per_blank;

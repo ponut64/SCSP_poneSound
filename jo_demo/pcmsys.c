@@ -286,7 +286,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 }
 
 // Recursive function to return gcd of a and b 
-inline short gcd(short a, short b) 
+short gcd(short a, short b) 
 { 
     if (a == 0)
         return b; 
@@ -295,7 +295,7 @@ inline short gcd(short a, short b)
  
 // Function to return LCM of two numbers 
 // Used specifically to find the buffer size for ADX sound effects
-inline short lcm(short a, short b) 
+short lcm(short a, short b) 
 { 
     return (a / gcd(a, b)) * b;
 } 

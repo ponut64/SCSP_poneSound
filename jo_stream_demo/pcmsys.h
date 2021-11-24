@@ -142,6 +142,8 @@ extern short numberPCMs;
 //
 short			convert_bitrate_to_pitchword(short sampleRate);
 short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL);
+short 			lcm(short a, short b);
+void			cd_init(void);
 
 //
 // These are likely to be duplicate commands from other libraries.
