@@ -80,7 +80,7 @@ void	pcm_cease(short pcmNumber)
 	
 /**stolen from xl2**/
 #define     OPEN_MAX    (Sint32)5
-#define     DIR_MAX     (Sint32)25
+#define     DIR_MAX     (Sint32)1024
 #define     RD_UNIT     (10)
 #define     SECT_SIZE   (2048)
 GfsDirTbl gfsDirTbl;
