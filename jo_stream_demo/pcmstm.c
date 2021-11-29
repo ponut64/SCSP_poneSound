@@ -9,8 +9,6 @@
 	_pcm_stm_buf_ctrl buf;
 	_generic_file_ctrl file;
 	
-	void (*file_handler_function)(void *);
-	
 	int file_transfer_sector = 9;
 	int file_transfer_size = (9 * 2048);
 
