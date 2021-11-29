@@ -92,34 +92,34 @@ void			my_draw(void)
 	jo_printf(1, 22, "Have fun with the source code ...");
 	jo_printf(1, 23, "It's a mess! I love it!");
 	
-	if(is_key_struck(DIGI_A))
+	if(is_key_pressed(DIGI_A))
 	{
 	start_adx_stream((Sint8*)"GORDON.ADX", 6);
 	}
 	
-	if(is_key_struck(DIGI_Z))
+	if(is_key_pressed(DIGI_Z))
 	{
 	start_adx_stream((Sint8*)"ANIMES.ADX", 6);
 	}
 	
-	if(is_key_struck(DIGI_B))
+	if(is_key_pressed(DIGI_B))
 	{
 		stop_adx_stream();
 	}
 
-	if(is_key_struck(DIGI_X))
+	if(is_key_pressed(DIGI_X))
 	{
 		start_pcm_stream((Sint8*)"MGEAR.PCM", 5);
 		stm.times_to_loop = 1;
 	}
 	
-	if(is_key_struck(DIGI_Y))
+	if(is_key_pressed(DIGI_Y))
 	{
 		stop_pcm_stream();
 		stm.times_to_loop = 0;
 	}
 	
-	if(is_key_struck(DIGI_C))
+	if(is_key_pressed(DIGI_C))
 	{
 		pcm_play(snd_exert, PCM_SEMI, 7);
 	}
@@ -152,7 +152,7 @@ void			jo_main(void)
 {
 
 	jo_core_init(JO_COLOR_Black);
-	SynchConst=1;  
+	SynchConst=2;  
 	load_drv(ADX_MASTER_2304);
 	my_load();
 	
@@ -163,7 +163,7 @@ void			jo_main(void)
 	
 	slIntFunction(vblanker);
 	pcm_stream_init(30720, PCM_TYPE_8BIT);
-	pcm_stream_host(my_draw, loading_system_scratch_buffer);
+	pcm_stream_host(my_draw);
 }
 
 /*

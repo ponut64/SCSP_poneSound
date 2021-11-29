@@ -13,8 +13,10 @@
 // In case of bugs, increase PCM_BUFFERED_BLANKS by 32.
 //
 #define PCM_BUFFERED_BLANKS (96)
-#define NUM_PCM_BUF (PCM_BUFFERED_BLANKS / 32)
+#define NUM_PCM_BUF (PCM_BUFFERED_BLANKS / 48)
 ////////////////////
+//
+#define MAX_FILE_REQUESTS (16)
 
 /*
 
@@ -105,7 +107,8 @@ typedef struct {
 	bool requested;
 	bool setup_requested;
 	bool transfer_lock;
-	
+	void * destination;
+
 } _generic_file_ctrl;
 
 typedef struct {
@@ -124,8 +127,18 @@ typedef struct {
 } adx_stream_param;
 
 //
-//
-extern void (*file_handler_function)(void *);
+//Proprietary file stream manager, in case of using dynamic file loading.
+
+typedef struct {
+	Sint32 id; //File-system ID
+	void * destination; //Destination address
+	void (*handler_function)(void *); //Pointer to function used to handle this file
+	bool active; // File request writes "1" when it wants this file served. Manager writes "0" when done.
+	bool done; // File request writes "0" when it wants the file served. Manager writes "1" when done.
+} _file_request_entry;
+
+void	new_file_request(Sint8 * filename, void * destination, void (*handler_function)(void *));
+
 //
 //
 
@@ -141,7 +154,7 @@ void	pcm_stream_init(int bitrate, int bit_depth);
 void	start_pcm_stream(Sint8 * filename, int volume);
 void	stop_adx_stream(void);
 void	stop_pcm_stream(void);
-void	pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location);
+void	pcm_stream_host(void(*game_code)(void));
 
 
 

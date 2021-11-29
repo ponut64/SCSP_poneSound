@@ -16,6 +16,52 @@
 
 	adx_stream_param adx_stream;
 
+	_file_request_entry file_request_list[MAX_FILE_REQUESTS];
+	_file_request_entry * active_request;
+	int number_of_requests = 0;
+
+void	start_file_stream(Sint32 id, void * destination)
+{
+	if(adx_stream.file.transfer_lock || file.requested || file.setup_requested) return;
+	file.id = id;
+	file.setup_requested = true;
+	file.destination = destination;
+}
+
+void	file_request_manager(void)
+{
+	// Don't process if file access is already happening.
+	if(file.requested || file.setup_requested || adx_stream.file.transfer_lock) return;
+	for(int i = number_of_requests; i > -1; i--)
+	{
+		if(file_request_list[i].active && !file_request_list[i].done)
+		{
+			start_file_stream(file_request_list[i].id, file_request_list[i].destination);
+			active_request = &file_request_list[i];
+			break;
+		}
+	}
+}
+
+void	new_file_request(Sint8 * filename, void * destination, void (*handler_function)(void *))
+{
+	if(number_of_requests >= MAX_FILE_REQUESTS) return;
+	file_request_list[number_of_requests].id = GFS_NameToId(filename);
+	file_request_list[number_of_requests].destination = destination;
+	file_request_list[number_of_requests].handler_function = handler_function;
+	file_request_list[number_of_requests].active = 1;
+	file_request_list[number_of_requests].done = 0;
+	number_of_requests++;
+}
+
+void	finish_file_request(void)
+{
+	active_request->handler_function(active_request->destination);
+	active_request->active = 0;
+	active_request->done = 1;
+	number_of_requests--;
+}
+
 /*
 
 Will set the process-in-motion to open the (filename) and play it back as a PCM stream.
@@ -47,11 +93,11 @@ void	stop_pcm_stream(void)
 // This function is for premature stoppage of the sound.
 void		stop_adx_stream(void)
 {
-		if(adx_stream.active)
-		{
+	//	if(adx_stream.active)
+	//	{
 	m68k_com->pcmCtrl[adx_stream.pcm_number].sh2_permit = 0;
 	adx_stream.request_stop = 1;
-		}
+	//	}
 }
 
 //
@@ -223,7 +269,7 @@ void	pcm_stream_init(int bitrate, int bit_depth)
 		short byte_rate = calculate_bytes_per_blank(bitrate, bit_depth, PCM_SYS_REGION);
 			
 		buf.buffer_size_bytes = byte_rate * PCM_BUFFERED_BLANKS; //"byte_rate" being the bytes per blank of the music track
-		buf.transfer_sectors = (((buf.buffer_size_bytes >> 13) << 13 ) == buf.buffer_size_bytes) ? 4 : 3;
+		buf.transfer_sectors = 12;
 		buf.transfer_bytes = (buf.transfer_sectors * 2048); 
 		buf.transfer_timing = buf.buffer_size_bytes / buf.transfer_bytes;
 		buf.segment_size = buf.buffer_size_bytes / NUM_PCM_BUF;
@@ -264,7 +310,7 @@ void		sdrv_stm_vblank_rq(void)
 
 		for(short b = 0; b < NUM_PCM_BUF; b++)
 		{
-			if(buf.vblank_counter == buf.segment_refresh_timings[b] && buf.segment_full[b] == true)
+			if(buf.vblank_counter == buf.segment_refresh_timings[b])
 			{
 				///////////////////////////////////
 				//	BUFFER CONSUMPTION CONTROL
@@ -327,7 +373,7 @@ void		sdrv_stm_vblank_rq(void)
 	m68k_com->start = 1;	
 }
 
-void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location)
+void		pcm_stream_host(void(*game_code)(void))
 {
 	
 	static Sint32 gfs_svr_status;
@@ -354,9 +400,9 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 	|		| -> File system CD -> RAM
 	|		| -> File system completion
 	|		| -> File system set-up
-	|		| -> ADX, set-up 
 	|		| -> ADX, CD -> RAM, 18KB
 	|		| -> ADX, Completion / closure
+	|		| -> ADX, set-up 
 	--> PCM Active...
 			| -> Operate CD -> RAM Activity, one-buffer segment
 	
@@ -364,7 +410,7 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 	
 		if(buf.setup_requested)
 		{
-				game_code();
+				//game_code();
 			/////////////
 					jo_printf(16, 2, "--SETM--");
 			buf.file_handle = GFS_Open(buf.file_id);
@@ -374,9 +420,9 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 				SetTransPara sets the sectors per request to be transferred from the CD block buffer to system addressable memory.
 				SetTmode sets the DMA channel to be used for the request. We set SDMA1 specifically. SDMA0 can be used.
 			*/
-			//GFS_SetReadPara(buf.file_handle, buf.buffer_size_bytes);
-			//GFS_SetTransPara(buf.file_handle, buf.transfer_sectors);
-			//GFS_SetTmode(buf.file_handle, GFS_TMODE_SDMA0);
+			GFS_SetReadPara(buf.file_handle, buf.buffer_size_bytes);
+			GFS_SetTransPara(buf.file_handle, buf.transfer_sectors);
+			GFS_SetTmode(buf.file_handle, GFS_TMODE_SDMA0);
 			
 			GFS_GetFileInfo(buf.file_handle, NULL, NULL, &buf.total_bytes, NULL);
 			stm.total_blanks = buf.total_bytes / (int)m68k_com->pcmCtrl[stm.pcm_num].bytes_per_blank;
@@ -391,10 +437,10 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 			
 			buf.setup_requested = false;
 			//////////////
-				slSynch();
+				//slSynch();
 		} else if(stm.stopping)
 		{
-				game_code();
+				//game_code();
 			buf.operating = false;
 			buf.needs_buffer_filled = false;
 			stm.stopping = false;
@@ -409,11 +455,11 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 				pcm_cease(stm.pcm_num);
 			}
 			GFS_Close(buf.file_handle);
-				slSynch();
+				//slSynch();
 		} else if(!buf.needs_buffer_filled)
 		{
 		//Broadly speaking, this branch is generic file system or ADX streaming in the PCM stream's free time.
-			if((file.transfer_lock || !file.requested) && !file.setup_requested && !adx_stream.file.setup_requested
+			if((file.transfer_lock || !file.requested) && !file.setup_requested && !adx_stream.file.setup_requested && !adx_stream.request_stop
 			&& (!adx_stream.file.requested || (adx_stream.back_buffer_filled[0] || adx_stream.back_buffer_filled[1])) )
 			{
 			//This branch is for no file system activity. Nothing is being presently accessed or requested to be set up.
@@ -429,16 +475,27 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 					// jo_printf(2, 12, "fsize(%i)", file.total_sectors);
 					// jo_printf(16, 12, "fnsct(%i)", file.total_bytes);
 					// jo_printf(2, 6, "bytes(%i)", bytes_read_now);
+					
+					// jo_printf(2, 5, "steps(%i)", buf.vblank_counter);
+					// jo_printf(2, 6, "bytes(%i)", buf.active_buf_segment);
+					// jo_printf(2, 8, "buf0f(%i)", buf.segment_full[0]); 
+					// jo_printf(2, 9, "buf1f(%i)", buf.segment_full[1]); 
+					// jo_printf(2, 10, "buf2f(%i)", buf.segment_full[2]); 
+					// jo_printf(16, 8, "buf0t(%i)", buf.segment_refresh_timings[0]);
+					// jo_printf(16, 9, "buf1t(%i)", buf.segment_refresh_timings[1]);
+					// jo_printf(16, 10, "buf2t(%i)", buf.segment_refresh_timings[2]);
+					
 					// jo_printf(16, 6, "bufrq(%i)", buf.needs_buffer_filled);
 					// jo_printf(2, 8, "adx0f(%i)", adx_stream.back_buffer_filled[0]); 
 					// jo_printf(2, 9, "adx1f(%i)", adx_stream.back_buffer_filled[1]); 
 					// jo_printf(16, 8, "adxrq(%i)", adx_stream.file.requested);
-					// jo_printf(16, 9, "atrans(%i)", gfs_svr_status);
+					// jo_printf(16, 9, "a_acti(%i)", adx_stream.active);
 					// jo_printf(2, 10, "asetup(%i)", adx_stream.file.setup_requested);
 					// jo_printf(16, 10, "asect(%i)", adx_stream.file.sectors_read_so_far);
 					// jo_printf(2, 12, "asize(%i)", adx_stream.file.total_bytes);
 					// jo_printf(16, 12, "ansct(%i)", adx_stream.file.total_sectors);
 				/////////////
+				file_request_manager();
 				if(!buf.operating)
 				{
 					//Un-lock file system in case of PCM stream being paused.
@@ -450,7 +507,7 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 			{
 			//This branch is for serving an active file request from CD to RAM.
 			GFS_NwFread(file.handle, file_transfer_sector,
-			file_system_buffer_location + (file.sectors_read_so_far * file_transfer_size), file_transfer_size);
+			file.destination + (file.sectors_read_so_far * file_transfer_size), file_transfer_size);
 				do{
 					game_code();
 						jo_printf(16, 2, "--FILE--");
@@ -475,17 +532,17 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 			{
 			//This branch is for when the file transfer is complete. It also triggers the data handling function.
 			//The file handler function is a function pointer, not a direct reference, so user can change it when file type changes.
-				game_code();
+				//game_code();
 			/////////////////
-				file_handler_function(file_system_buffer_location);
+				finish_file_request();
 				file.requested = false;
 				GFS_Close(file.handle);
-				slSynch();
+				//slSynch();
 			} else if(!file.requested && file.setup_requested && !adx_stream.file.transfer_lock)
 			{
 			//This branch is for when a file is requested, but the file system parameters for that file are not yet set.
 			//The parameters are set and other important parameters are re-set here, too.
-				game_code();
+				//game_code();
 			//////////////////
 				file.handle = GFS_Open(file.id);
 				GFS_SetReadPara(file.handle, (64 * 1024));
@@ -498,50 +555,9 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 				file.requested = true;
 				file.transfer_lock = true;
 			//////////////////
-				slSynch();
-			} else if(!adx_stream.file.requested && adx_stream.file.setup_requested && adx_stream.front_buffer_okay && adx_stream.back_buffer_okay)
-			{
-			/////////////////////////////////
-			//
-			//	This branch is for when an ADX file is requested, but the file system parameters for it are not yet set.
-			//	This broadly sets up the file system to stream the ADX. It also prepares the driver for the sound.
-			//
-				game_code();
-			////////////////////////////
-				adx_stream.file.handle = GFS_Open(adx_stream.file.id);
-				GFS_SetReadPara(adx_stream.file.handle, (64 * 1024));
-				GFS_SetTransPara(adx_stream.file.handle, file_transfer_sector);
-				GFS_SetTmode(adx_stream.file.handle, GFS_TMODE_SDMA0);
-				GFS_GetFileSize(adx_stream.file.handle, NULL, &adx_stream.file.total_sectors, NULL);
-				GFS_GetFileInfo(adx_stream.file.handle, NULL, NULL, &adx_stream.file.total_bytes, NULL);
-				adx_stream.file.sectors_read_so_far = 0;
-				adx_stream.file.setup_requested = false;
-				adx_stream.file.requested = true;
-				adx_stream.file.transfer_lock = true;
-				//////////////////////
-				adx_stream.back_buffer_filled[0] = false;
-				adx_stream.back_buffer_filled[1] = false;
-				/////////////////////
-				// Tell Driver how long to play the sound
-				// It's approximate, but should be ok.
-				m68k_com->adx_stream_length = (adx_stream.file.total_bytes / 18)-1;
-				/////////////////////
-				slSynch();
-			} else if(adx_stream.file.sectors_read_so_far >= adx_stream.file.total_sectors || adx_stream.request_stop == true)
-			{
-				////////////////////////
-				//End handling ADX file. The driver should know when to properly stop playback.
-				game_code();
-				////////////////////////
-				adx_stream.file.requested = false;
-				adx_stream.file.transfer_lock = false;
-				adx_stream.active = false;
-				adx_stream.playing = false;
-				adx_stream.request_stop = false;
-				GFS_Close(adx_stream.file.handle);
-				slSynch();
-			} else if(adx_stream.file.requested && !adx_stream.back_buffer_filled[0] && !adx_stream.back_buffer_filled[1]
-						&& adx_stream.file.sectors_read_so_far < adx_stream.file.total_sectors)
+				//slSynch();
+			} else if(adx_stream.file.requested /*&& !adx_stream.back_buffer_filled[0] && !adx_stream.back_buffer_filled[1] */
+						&& adx_stream.file.sectors_read_so_far < adx_stream.file.total_sectors && !adx_stream.request_stop)
 			{
 			//Basically, we set-up the ADX file, and trigger it to read in new data when the back buffer is empty.
 			//This branch is for serving an active file request from CD to RAM.
@@ -574,10 +590,52 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 				// In case of the sound not playing yet, this buffer fill was a pre-buffer.
 				// Now we should start playing the sound.
 				//
-				if(!m68k_com->pcmCtrl[adx_stream.pcm_number].sh2_permit)
+				if(!m68k_com->pcmCtrl[adx_stream.pcm_number].sh2_permit && !adx_stream.request_stop)
 				{
 					pcm_play(adx_stream.pcm_number, ADX_STREAM, adx_stream.volume);
 				}
+			} else if((adx_stream.file.requested && adx_stream.file.sectors_read_so_far >= adx_stream.file.total_sectors) || adx_stream.request_stop)
+			{
+				////////////////////////
+				//End handling ADX file. The driver should know when to properly stop playback.
+			//	game_code();
+				////////////////////////
+				adx_stream.file.requested = false;
+				adx_stream.file.transfer_lock = false;
+				adx_stream.file.setup_requested = false;
+				adx_stream.active = false;
+				adx_stream.playing = false;
+				adx_stream.request_stop = false;
+				GFS_Close(adx_stream.file.handle);
+			//	slSynch();
+			} else if(!adx_stream.file.requested && adx_stream.file.setup_requested && adx_stream.front_buffer_okay && adx_stream.back_buffer_okay)
+			{
+			/////////////////////////////////
+			//
+			//	This branch is for when an ADX file is requested, but the file system parameters for it are not yet set.
+			//	This broadly sets up the file system to stream the ADX. It also prepares the driver for the sound.
+			//
+			//	game_code();
+			////////////////////////////
+				adx_stream.file.handle = GFS_Open(adx_stream.file.id);
+				GFS_SetReadPara(adx_stream.file.handle, (64 * 1024));
+				GFS_SetTransPara(adx_stream.file.handle, file_transfer_sector);
+				GFS_SetTmode(adx_stream.file.handle, GFS_TMODE_SDMA0);
+				GFS_GetFileSize(adx_stream.file.handle, NULL, &adx_stream.file.total_sectors, NULL);
+				GFS_GetFileInfo(adx_stream.file.handle, NULL, NULL, &adx_stream.file.total_bytes, NULL);
+				adx_stream.file.sectors_read_so_far = 0;
+				adx_stream.file.setup_requested = false;
+				adx_stream.file.requested = true;
+				adx_stream.file.transfer_lock = true;
+				//////////////////////
+				adx_stream.back_buffer_filled[0] = false;
+				adx_stream.back_buffer_filled[1] = false;
+				/////////////////////
+				// Tell Driver how long to play the sound
+				// It's approximate, but should be ok.
+				m68k_com->adx_stream_length = (adx_stream.file.total_bytes / 18)-1;
+				/////////////////////
+			//	slSynch();
 			}
 		} else if(buf.needs_buffer_filled && buf.operating)
 		{
@@ -594,7 +652,17 @@ void		pcm_stream_host(void(*game_code)(void), void * file_system_buffer_location
 					// jo_printf(16, 6, "bufrq(%i)", buf.needs_buffer_filled);
 					// jo_printf(2, 8, "buf0f(%i)", buf.segment_full[0]); 
 					// jo_printf(2, 9, "buf1f(%i)", buf.segment_full[1]); 
+					// jo_printf(2, 10, "buf2f(%i)", buf.segment_full[2]); 
 					// jo_printf(0, 19, "stat(%i)", gfs_svr_status);
+					
+					// jo_printf(2, 5, "steps(%i)", buf.vblank_counter);
+					// jo_printf(2, 6, "bytes(%i)", buf.active_buf_segment);
+					// jo_printf(2, 8, "buf0f(%i)", buf.segment_full[0]); 
+					// jo_printf(2, 9, "buf1f(%i)", buf.segment_full[1]); 
+					// jo_printf(2, 10, "buf2f(%i)", buf.segment_full[2]); 
+					// jo_printf(16, 8, "buf0t(%i)", buf.segment_refresh_timings[0]);
+					// jo_printf(16, 9, "buf1t(%i)", buf.segment_refresh_timings[1]);
+					// jo_printf(16, 10, "buf2t(%i)", buf.segment_refresh_timings[2]);
 				slSynch();
 					if(buf.steps_of_new_data_in_buffer > buf.segment_transfer_time)
 					{
