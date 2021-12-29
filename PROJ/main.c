@@ -186,6 +186,7 @@ typedef struct {
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
 	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	volatile _PCM_CTRL * pcmCtrl;
+	volatile short cdda_volume; // Redbook audio volume. 3 bit value, most significant 13 bits are ignored
 } sysComPara;
 
 
@@ -276,6 +277,16 @@ void	driver_data_init(void)
 		csr[i].input_sel			= 0;
 		csr[i].pan_send				= 0;
 	}
+	
+		// CD-DA Initialization
+		// Slot 16 and 17 are **hard-wired** as the slots which play redbook audio.
+		// They play redbook audio as "effect data".
+		// Lock slot 16 & 17. These are for CDDA only.
+		ICSR_Busy[16] = 1;
+		ICSR_Busy[17] = 1;
+		// Set max volume for CDDA.
+		sh2Com->cdda_volume = 7;
+	
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
 		pcmCtrlData[k].sh2_permit = 0;
@@ -1144,6 +1155,7 @@ void	pcm_control_loop(void)
 
 void	_start(void)
 {
+	short old_volume = 0;
 	driver_data_init();
 	while(1){
 		//
@@ -1155,7 +1167,22 @@ void	_start(void)
 		// Region will run the program once for every time the SH2 commands the driver to start.
 		pcm_control_loop();
 		
-
+		// Update CDDA volume
+		// Note that SCSP Slot 16 & 17 are hard-wired as the redbook / CDDA playback slots.
+		// They play the sound back as effect data. The pan_send bits set the volume, and the pan, for each channel.
+		// The process here **must** be followed for changing CD-DA volume as well as for initializing it.
+		if(old_volume != sh2Com->cdda_volume)
+		{
+		sh2Com->cdda_volume &= 0x7;
+		sh2Com->cdda_volume <<= 5;
+		csr[16].keys = 0x1000;
+		csr[16].attenuation = 0xFF;
+		csr[16].pan_send = 0x1F | sh2Com->cdda_volume;
+		csr[17].keys = 0x1000;
+		csr[17].attenuation = 0xFF;
+		csr[17].pan_send = 0x0F | sh2Com->cdda_volume;
+		}
+		old_volume = sh2Com->cdda_volume;
 	}
 
 }

@@ -363,3 +363,48 @@ void		sdrv_vblank_rq(void)
 	m68k_com->start = 1;	
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Redbook Support
+// These are mostly CDC commands.
+// credit to: ndiddy, ReyeMe, CyberWarriorX [iapetus]
+////////////////////////////////////////////////////////////////////////////////
+
+void CDDASetVolume(int vol)
+{
+	m68k_com->cdda_volume = (vol & 0x7);	
+}
+
+void CDDAPlay(int fromTrack, int toTrack, bool loop)
+{
+    CdcPly ply;
+    CDC_PLY_STYPE(&ply) = CDC_PTYPE_TNO; // track number
+    CDC_PLY_STNO(&ply) = fromTrack;
+    CDC_PLY_SIDX(&ply) = 1;
+    CDC_PLY_ETYPE(&ply) = CDC_PTYPE_TNO;
+    CDC_PLY_ETNO(&ply) = toTrack;
+    CDC_PLY_EIDX(&ply) = 1;
+
+    if (loop)
+    {
+        CDC_PLY_PMODE(&ply) = CDC_PM_DFL | 0xf; // 0xf = infinite repetitions
+    }
+    else
+    {
+        CDC_PLY_PMODE(&ply) = CDC_PM_DFL;
+    }
+
+    CDC_CdPlay(&ply);
+}
+
+void CDDAPlaySingle(int track, bool loop)
+{
+    CDDAPlay(track, track, loop);
+}
+
+void CDDAStop(void)
+{
+    CdcPos poswk;
+    CDC_POS_PTYPE(&poswk) = CDC_PTYPE_DFL;
+    CDC_CdSeek(&poswk);
+}
+
