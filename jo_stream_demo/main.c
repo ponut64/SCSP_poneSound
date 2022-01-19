@@ -2,7 +2,6 @@
 #include <jo/jo.h>
 #include "pcmsys.h"
 #include "pcmstm.h"
-#include "input.h"
 
 #define LWRAM	(2097152)
 
@@ -45,7 +44,7 @@ void	update_gamespeed(void)
 		} 
 		//
 		
-		if(is_key_down(DIGI_START) && is_key_down(DIGI_A) && is_key_down(DIGI_B) && is_key_down(DIGI_C))
+		if(jo_is_pad1_key_pressed(JO_KEY_START | JO_KEY_A | JO_KEY_B | JO_KEY_C))
 		{
 			SYS_Exit(0);
 		}
@@ -92,60 +91,38 @@ void			my_draw(void)
 	jo_printf(1, 22, "Have fun with the source code ...");
 	jo_printf(1, 23, "It's a mess! I love it!");
 	
-	if(is_key_pressed(DIGI_A))
+	if(jo_is_input_key_pressed(0, JO_KEY_A))
 	{
 	start_adx_stream((Sint8*)"GORDON.ADX", 6);
 	}
 	
-	if(is_key_pressed(DIGI_Z))
+	if(jo_is_input_key_pressed(0, JO_KEY_Z))
 	{
 	start_adx_stream((Sint8*)"ANIMES.ADX", 6);
 	}
 	
-	if(is_key_pressed(DIGI_B))
+	if(jo_is_input_key_pressed(0, JO_KEY_B))
 	{
 		stop_adx_stream();
 	}
 
-	if(is_key_pressed(DIGI_X))
+	if(jo_is_input_key_pressed(0, JO_KEY_X))
 	{
 		start_pcm_stream((Sint8*)"MGEAR.PCM", 5);
 		stm.times_to_loop = 1;
 	}
 	
-	if(is_key_pressed(DIGI_Y))
+	if(jo_is_input_key_pressed(0, JO_KEY_Y))
 	{
 		stop_pcm_stream();
 		stm.times_to_loop = 0;
 	}
 	
-	if(is_key_pressed(DIGI_C))
+	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
 		pcm_play(snd_exert, PCM_SEMI, 7);
 	}
 
-}
-
-void			handle_the_text_file(void * location_in_memory)
-{
-	
-	//Nothing.
-	char * text = (char *)location_in_memory;
-	
-	jo_printf(0, 14, "text(%c)", *text);
-}
-
-void			vblanker(void)
-{
-	
-	//jo_printf(0, 20, "dbg0(%i)", m68k_com->adx_stream_comm);
-	// jo_printf(0, 20, "atm0(%i)", m68k_com->adx_buffer_pass[0]);
-	// jo_printf(0, 21, "atm1(%i)", m68k_com->adx_buffer_pass[1]);
-	// jo_printf(0, 22, "cf2(%i)", m68k_com->drv_adx_coef_1);
-	// jo_printf(0, 23, "apm(%i)", m68k_com->pcmCtrl[snd_adx].sh2_permit);
-	
-	operate_digital_pad1();
-	sdrv_stm_vblank_rq();
 }
 
 void			jo_main(void)
@@ -155,13 +132,8 @@ void			jo_main(void)
 	SynchConst=2;  
 	load_drv(ADX_MASTER_2304);
 	my_load();
-	
 
-	//generic_file_sys_id = GFS_NameToId((Sint8*)"TSTF.TXT");
-	//file_handler_function = handle_the_text_file;
-	//file_setup_requested = true;
-	
-	slIntFunction(vblanker);
+	jo_core_add_vblank_callback(sdrv_stm_vblank_rq);
 	pcm_stream_init(30720, PCM_TYPE_8BIT);
 	pcm_stream_host(my_draw);
 }

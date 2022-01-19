@@ -10,7 +10,7 @@ JO_COMPILE_WITH_DUAL_CPU_MODULE = 0
 JO_DEBUG = 0
 JO_COMPILE_USING_SGL=1
 JO_NTSC = 1
-SRCS=main.c pcmsys.c pcmstm.c input.c
+SRCS=main.c pcmsys.c pcmstm.c
 JO_ENGINE_SRC_DIR=../../jo_engine
 COMPILER_DIR=../../Compiler
 include $(COMPILER_DIR)/COMMON/jo_engine_makefile
