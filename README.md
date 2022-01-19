@@ -22,7 +22,9 @@ It's important to note that due to the low buffer size, the ADX stream starts pl
 It therefore carries some relevance for use in general sound design (like, for voice lines).
 However, the raw PCM stream takes significant time to buffer.
 
-It should be noted that _if you can find a way to use it_, CDDA (Redbook) makes **much** more efficient use of the Saturn's CD drive if you want the highest quality music.
+It should be noted that CD-DA makes much better use of CD bandwidth for music. 
+The downside is that CD-DA tracks are big, and inflexible in size.
+CD-DA also locks access to the CD drive when active; it takes 100% of the bandwidth.
 
 There are two seprate usage demos:
 jo_demo, which is for the general-basic functions in pcmsys.c/h.
