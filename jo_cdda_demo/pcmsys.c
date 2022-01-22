@@ -369,12 +369,32 @@ void		sdrv_vblank_rq(void)
 // credit to: ndiddy, ReyeMe, CyberWarriorX [iapetus]
 ////////////////////////////////////////////////////////////////////////////////
 
-void CDDASetVolume(int vol)
+
+void CDDA_SetVolume(int vol)
 {
-	m68k_com->cdda_volume = (vol & 0x7);	
+	//Step 1: Remove the volume bits from the value (isolate the pan)
+	unsigned char newvol = m68k_com->cdda_left_channel_vol_pan & 0x1F;
+	//Step 2: Apply the volume to the correct bits
+	newvol |= ((vol & 0x7)<<5);
+	//Step 3: Apply value back to left channel
+	m68k_com->cdda_left_channel_vol_pan = newvol;
+	//Step 4: Repeat for right channel
+	newvol = m68k_com->cdda_right_channel_vol_pan & 0x1F;
+	//Step 5: Apply the volume to the correct bits
+	newvol |= ((vol & 0x7)<<5);
+	//Step 6: Apply value back to right channel
+	m68k_com->cdda_right_channel_vol_pan = newvol;
 }
 
-void CDDAPlay(int fromTrack, int toTrack, bool loop)
+//	To see what this does and how to use it, refer to the SCSP manual.
+//	Warning: Use without reading the manual may break your CD audio.
+void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel)
+{
+	m68k_com->cdda_left_channel_vol_pan = left_channel;
+	m68k_com->cdda_right_channel_vol_pan = right_channel;
+}
+
+void CDDA_Play(int fromTrack, int toTrack, bool loop)
 {
     CdcPly ply;
     CDC_PLY_STYPE(&ply) = CDC_PTYPE_TNO; // track number
@@ -396,12 +416,12 @@ void CDDAPlay(int fromTrack, int toTrack, bool loop)
     CDC_CdPlay(&ply);
 }
 
-void CDDAPlaySingle(int track, bool loop)
+void CDDA_PlaySingle(int track, bool loop)
 {
-    CDDAPlay(track, track, loop);
+    CDDA_Play(track, track, loop);
 }
 
-void CDDAStop(void)
+void CDDA_Stop(void)
 {
     CdcPos poswk;
     CDC_POS_PTYPE(&poswk) = CDC_PTYPE_DFL;

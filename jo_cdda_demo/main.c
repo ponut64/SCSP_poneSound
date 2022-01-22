@@ -30,6 +30,7 @@ void			my_draw(void)
 	jo_printf(0, 21, "You could run out of CD space using CDDA.");
 	
 	jo_printf(0, 24, "Press Z to start CD-DA");
+	jo_printf(0, 25, "Press Y to make CD-DA quiet");
 	
 	// jo_printf(0, 18, "Y pans sound from A button");
 	
@@ -54,7 +55,17 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_Z))
 	{
-		CDDAPlaySingle(2, true);
+		CDDA_PlaySingle(2, true);
+	}
+	
+	if(jo_is_input_key_pressed(0, JO_KEY_Y))
+	{
+		CDDA_SetVolume(2);
+	}
+	
+	if(jo_is_input_key_pressed(0, JO_KEY_X))
+	{
+		pcm_cease(adx4snd);
 	}
 	
 	//slSynch();

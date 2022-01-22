@@ -186,7 +186,8 @@ typedef struct {
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
 	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	volatile _PCM_CTRL * pcmCtrl;
-	volatile short cdda_volume; // Redbook audio volume. 3 bit value, most significant 13 bits are ignored
+	volatile unsigned char cdda_left_channel_vol_pan; // Redbook left channel volume & pan.
+	volatile unsigned char cdda_right_channel_vol_pan; // Redbook right channel volume & pan.
 } sysComPara;
 
 
@@ -234,7 +235,8 @@ short adx_dummy[ADX_CTRL_MAX];
 /*
 	-----------------------NTSC VERSION----------------------------
 		DRIVER REFRESH CYCLE : 60 HZ / 16.66ms
-	Bitrate	|	Buffer Size	|	Demand	|	Slots?	|	IMA Slots?
+		TOTAL SLOTS: 6
+	Bitrate	|	Buffer Size	|	Demand	|	Slots	|	IMA Slots?
 	7680		2560			320			2			1
 	11520		5376			448			3			2
 	15360		9216			576			4			3
@@ -242,11 +244,15 @@ short adx_dummy[ADX_CTRL_MAX];
 			(Total: 20KB) 	(Total Budget: 960)
 	----------------------PAL VERSION------------------------------
 		DRIVER REFRESH CYCLE : 50 HZ / 20ms
-	Bitrate	|	Buffer Size	|	Demand	|	Slots?	|	IMA Slots?
-	6400		2560			320			2			?
-	9600		5376			448			3			?
-	12800		9216			576			4			?
-	19200		19968			832			6			?
+										  (6 total)		(7 total)
+	Bitrate	|	Buffer Size	|	Demand	|	Slots	|	Adjusted slots?
+	6400		2560			320			2			2
+	9600		5376			448			3 			3
+	12800		9216			576			4 			3
+	19200		19968			832			6 			5
+	It really should be possible for PAL to have more ADX sounds.
+	The driver has more time, and the bit-rates are lower.
+	Though, the fixed buffer size of 20KB means that the slots cannot change without a PAL-specific driver being made.
 			(Total: 20KB) 	(Total Budget: 1152)
 */
 short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[6000]};
@@ -284,8 +290,9 @@ void	driver_data_init(void)
 		// Lock slot 16 & 17. These are for CDDA only.
 		ICSR_Busy[16] = 1;
 		ICSR_Busy[17] = 1;
-		// Set max volume for CDDA.
-		sh2Com->cdda_volume = 7;
+		// Set max volume for CDDA, and the default pan information.
+		sh2Com->cdda_left_channel_vol_pan = 0x1F | 224;
+		sh2Com->cdda_right_channel_vol_pan = 0x0F | 224;
 	
 	for(short k = 0; k < PCM_CTRL_MAX; k++)
 	{
@@ -1155,7 +1162,8 @@ void	pcm_control_loop(void)
 
 void	_start(void)
 {
-	short old_volume = 0;
+	static short new_volume = 0;
+	static short old_volume = 0;
 	driver_data_init();
 	while(1){
 		//
@@ -1171,18 +1179,20 @@ void	_start(void)
 		// Note that SCSP Slot 16 & 17 are hard-wired as the redbook / CDDA playback slots.
 		// They play the sound back as effect data. The pan_send bits set the volume, and the pan, for each channel.
 		// The process here **must** be followed for changing CD-DA volume as well as for initializing it.
-		if(old_volume != sh2Com->cdda_volume)
+		// ------------- ----------First: Check if we need to update the information at all.
+		// We find that out by doing a process to see if the volume information has changed.
+		// If the old volume information is not the same as the current volume information, update the sound slots.
+		new_volume = sh2Com->cdda_left_channel_vol_pan + sh2Com->cdda_right_channel_vol_pan;
+		if(old_volume != new_volume)
 		{
-		sh2Com->cdda_volume &= 0x7;
-		sh2Com->cdda_volume <<= 5;
 		csr[16].keys = 0x1000;
 		csr[16].attenuation = 0xFF;
-		csr[16].pan_send = 0x1F | sh2Com->cdda_volume;
+		csr[16].pan_send = sh2Com->cdda_left_channel_vol_pan;
 		csr[17].keys = 0x1000;
 		csr[17].attenuation = 0xFF;
-		csr[17].pan_send = 0x0F | sh2Com->cdda_volume;
+		csr[17].pan_send = sh2Com->cdda_right_channel_vol_pan;
 		}
-		old_volume = sh2Com->cdda_volume;
+		old_volume = new_volume;
 	}
 
 }

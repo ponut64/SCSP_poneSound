@@ -113,7 +113,8 @@ typedef struct {
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
 	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	volatile _PCM_CTRL * pcmCtrl;
-	volatile short cdda_volume; // Redbook audio volume. 3-bit value, 13 most significant bits are ignored
+	volatile unsigned char cdda_left_channel_vol_pan; // Redbook left channel volume & pan.
+	volatile unsigned char cdda_right_channel_vol_pan; // Redbook right channel volume & pan.
 } sysComPara;
 
 
@@ -172,10 +173,11 @@ void	sdrv_vblank_rq(void);
 // Credit: ndiddy, ReyeMe, CyberWarriorX [Iapetus]
 //
 
-void CDDASetVolume(int vol);
-void CDDAPlay(int fromTrack, int toTrack, bool loop);
-void CDDAPlaySingle(int track, bool loop);
-void CDDAStop(void);
+void CDDA_SetVolume(int vol);
+void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel);
+void CDDA_Play(int fromTrack, int toTrack, bool loop);
+void CDDA_PlaySingle(int track, bool loop);
+void CDDA_Stop(void);
 
 
 #endif
