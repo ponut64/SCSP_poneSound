@@ -267,10 +267,11 @@ void	pcm_stream_init(int bitrate, int bit_depth)
 		short byte_rate = calculate_bytes_per_blank(bitrate, bit_depth, PCM_SYS_REGION);
 			
 		buf.buffer_size_bytes = byte_rate * PCM_BUFFERED_BLANKS; //"byte_rate" being the bytes per blank of the music track
-		buf.transfer_sectors = 12;
+		buf.segment_size = buf.buffer_size_bytes / NUM_PCM_BUF;
+		buf.transfer_sectors = buf.segment_size / 2048;
 		buf.transfer_bytes = (buf.transfer_sectors * 2048); 
 		buf.transfer_timing = buf.buffer_size_bytes / buf.transfer_bytes;
-		buf.segment_size = buf.buffer_size_bytes / NUM_PCM_BUF;
+
 		buf.segment_transfer_time = buf.segment_size / buf.transfer_bytes;
 		
 		buf.buffer_location_in_sndram = (void *)((unsigned int)scsp_load + SNDRAM);
@@ -475,15 +476,15 @@ void		pcm_stream_host(void(*game_code)(void))
 					// jo_printf(2, 6, "bytes(%i)", bytes_read_now);
 					
 					// jo_printf(2, 5, "steps(%i)", buf.vblank_counter);
-					// jo_printf(2, 6, "bytes(%i)", buf.active_buf_segment);
+					// jo_printf(2, 6, "segn(%i)", buf.active_buf_segment);
 					// jo_printf(2, 8, "buf0f(%i)", buf.segment_full[0]); 
 					// jo_printf(2, 9, "buf1f(%i)", buf.segment_full[1]); 
 					// jo_printf(2, 10, "buf2f(%i)", buf.segment_full[2]); 
 					// jo_printf(16, 8, "buf0t(%i)", buf.segment_refresh_timings[0]);
 					// jo_printf(16, 9, "buf1t(%i)", buf.segment_refresh_timings[1]);
 					// jo_printf(16, 10, "buf2t(%i)", buf.segment_refresh_timings[2]);
+					// jo_printf(16, 6, "stpl(%i)", stm.playing);
 					
-					// jo_printf(16, 6, "bufrq(%i)", buf.needs_buffer_filled);
 					// jo_printf(2, 8, "adx0f(%i)", adx_stream.back_buffer_filled[0]); 
 					// jo_printf(2, 9, "adx1f(%i)", adx_stream.back_buffer_filled[1]); 
 					// jo_printf(16, 8, "adxrq(%i)", adx_stream.file.requested);
