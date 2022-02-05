@@ -49,7 +49,7 @@ static const int logtbl[] = {
 #define PCM_SET_PITCH_WORD(oct, fns)										\
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
 		
-	sysComPara * m68k_com = (sysComPara *)(SNDPRG + DRV_SYS_END);
+	sysComPara * m68k_com = (sysComPara *)((SNDPRG + DRV_SYS_END) | 0x20000000);
 	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
@@ -181,6 +181,11 @@ void			load_drv(int master_adx_frequency)
 	// Copy driver over
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer, master_adx_frequency);
 	m68k_com->start = 0xFFFF;
+	volatile int i = 0;
+	for(i = 0; i < (int)scsp_load; i++)
+	{
+		//This is to pop the stack here. Because GCC.
+	}
 }
 
 short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL)

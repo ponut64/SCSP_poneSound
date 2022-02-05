@@ -143,11 +143,6 @@ short	add_adx_front_buffer(short bit_rate)
 	The driver should know to do that on its own when playing an ADX_STREAM.
 	That will get over the header and offset to data (total 36 bytes).
 	**/
-	volatile int i = 0;
-	for(i = 0; i < (int)scsp_load; i++)
-	{
-		//This is to pop the stack here. Because GCC.
-	}
 	adx_stream.front_buffer[0] = (void *)((unsigned int)scsp_load + SNDRAM);
 	adx_stream.front_buffer[1] = (void *)((unsigned int)scsp_load + SNDRAM + (adx_buf_sz>>1));
 	m68k_com->pcmCtrl[numberPCMs].hiAddrBits = (unsigned int)(scsp_load)>>16;
