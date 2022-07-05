@@ -54,6 +54,18 @@ static const int logtbl[] = {
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
 	
+static short adx_coef_tbl[8][2] = 
+{
+	{ADX_768_COEF_1,   ADX_768_COEF_2},
+	{ADX_1152_COEF_1, ADX_1152_COEF_2},
+	{ADX_1536_COEF_1, ADX_1536_COEF_2},
+	{ADX_2304_COEF_1, ADX_2304_COEF_2},
+	{ADX_640_COEF_1,   ADX_640_COEF_2},
+	{ADX_960_COEF_1,   ADX_960_COEF_2},
+	{ADX_1280_COEF_1, ADX_1280_COEF_2},
+	{ADX_1920_COEF_1, ADX_1920_COEF_2}
+};
+	
 void	pcm_play(short pcmNumber, char ctrlType, char volume)
 {
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
@@ -142,23 +154,10 @@ void	load_driver_binary(Sint8 * filename, void * buffer, int master_adx_frequenc
 	slDMACopy(buffer, (void*)SNDRAM, file_size);
 	slDMAWait();
 	//Set the ADX coefficients for the driver to use, if one was selected.
-	if(master_adx_frequency == ADX_MASTER_768)
-	{
-		m68k_com->drv_adx_coef_1 = ADX_768_COEF_1;
-		m68k_com->drv_adx_coef_2 = ADX_768_COEF_2;
-	} else if(master_adx_frequency == ADX_MASTER_1152){
-		m68k_com->drv_adx_coef_1 = ADX_1152_COEF_1;
-		m68k_com->drv_adx_coef_2 = ADX_1152_COEF_2;
-	} else if(master_adx_frequency == ADX_MASTER_1536){
-		m68k_com->drv_adx_coef_1 = ADX_1536_COEF_1;
-		m68k_com->drv_adx_coef_2 = ADX_1536_COEF_2;
-	} else if(master_adx_frequency == ADX_MASTER_2304){
-		m68k_com->drv_adx_coef_1 = ADX_2304_COEF_1;
-		m68k_com->drv_adx_coef_2 = ADX_2304_COEF_2;
-	} else {
-		m68k_com->drv_adx_coef_1 = 1;
-		m68k_com->drv_adx_coef_2 = 1;
-	}
+
+		m68k_com->drv_adx_coef_1 = adx_coef_tbl[master_adx_frequency][0];
+		m68k_com->drv_adx_coef_2 = adx_coef_tbl[master_adx_frequency][1];
+
 	// Turn on Sound CPU again
 	smpc_wait_till_ready();
 	smpc_issue_command(SMPC_CMD_SNDON);

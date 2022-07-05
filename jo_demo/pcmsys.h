@@ -88,6 +88,24 @@
 /* 23.04 data */
 #define ADX_2304_COEF_1 (6631)
 #define ADX_2304_COEF_2 (-2685)
+//////////////////////////////////////////////////////////////////////////////
+// 6400 Hz for PAL
+#define ADX_PAL_640 (4)
+#define ADX_640_COEF_1 (3915)
+#define ADX_640_COEF_2 (-936)
+// 9600 Hz for PAL
+#define ADX_PAL_960 (5)
+#define ADX_960_COEF_1 (4963)
+#define ADX_960_COEF_2 (-1504)
+// 12800 Hz for PAL
+#define ADX_PAL_1280 (6)
+#define ADX_1280_COEF_1 (5612)
+#define ADX_1280_COEF_2 (-1923)
+// 19200 Hz for PAL
+#define ADX_PAL_1920 (7)
+#define ADX_1920_COEF_1 (6359)
+#define ADX_1920_COEF_2 (-2469)
+
 
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
