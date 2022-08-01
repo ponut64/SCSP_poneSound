@@ -143,6 +143,11 @@ short	add_adx_front_buffer(short bit_rate)
 	The driver should know to do that on its own when playing an ADX_STREAM.
 	That will get over the header and offset to data (total 36 bytes).
 	**/
+	volatile int i = 0;
+	for(i = 0; i < (int)scsp_load; i++)
+	{
+		//This is to pop the stack here. Because GCC.
+	}
 	adx_stream.front_buffer[0] = (void *)((unsigned int)scsp_load + SNDRAM);
 	adx_stream.front_buffer[1] = (void *)((unsigned int)scsp_load + SNDRAM + (adx_buf_sz>>1));
 	m68k_com->pcmCtrl[numberPCMs].hiAddrBits = (unsigned int)(scsp_load)>>16;
@@ -150,13 +155,13 @@ short	add_adx_front_buffer(short bit_rate)
 	m68k_com->pcmCtrl[numberPCMs].pitchword = convert_bitrate_to_pitchword(bit_rate);
 	m68k_com->pcmCtrl[numberPCMs].playsize = 18384; //TBD by stream system, so just set it at a high number.
 	short bpb = calculate_bytes_per_blank((int)bit_rate, false, PCM_SYS_REGION); //Iniitalize as max volume
-	if(bpb != 768 && bpb != 512 && bpb != 384 && bpb != 256)
+	if(bpb != 768 && bpb != 512 && bpb != 384 && bpb != 256 && bpb != 192 && bpb != 128)
 	{
 		jo_printf(0, 1, "!(ADX INVALID BYTE-RATE)!");
 		return -2;
 	}
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = bpb;
-	m68k_com->pcmCtrl[numberPCMs].decompression_size = lcm(bpb, bpb + 64)<<1;
+	m68k_com->pcmCtrl[numberPCMs].decompression_size = (bpb >= 256) ? lcm(bpb, bpb + 64)<<1 : 5376; // Dirty fix for ultra low bitrate
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_ADX; //Select ADX type
 	m68k_com->pcmCtrl[numberPCMs].loopType = ADX_STREAM; //Initialize as ADX stream.
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume

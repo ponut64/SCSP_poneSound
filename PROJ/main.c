@@ -169,6 +169,7 @@ typedef struct {
 	short pcm_number;
 	unsigned int current_frame;
 	unsigned short whippet_frame;
+	unsigned short whippet_point;
 	short last_sample;
 	short last_last_sample;
 	unsigned short passed_buffers;
@@ -235,8 +236,11 @@ short adx_dummy[ADX_CTRL_MAX];
 /*
 	-----------------------NTSC VERSION----------------------------
 		DRIVER REFRESH CYCLE : 60 HZ / 16.66ms
-		TOTAL SLOTS: 6
+		TOTAL SLOTS: 6 (If we did IMA, slot count?)
 	Bitrate	|	Buffer Size	|	Demand	|	Slots	|	IMA Slots?
+	3840		768				192			1.2			1
+	5760		1536			256			1.6			1
+	
 	7680		2560			320			2			1
 	11520		5376			448			3			2
 	15360		9216			576			4			3
@@ -255,7 +259,7 @@ short adx_dummy[ADX_CTRL_MAX];
 	Though, the fixed buffer size of 20KB means that the slots cannot change without a PAL-specific driver being made.
 			(Total: 20KB) 	(Total Budget: 1152)
 */
-short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[6000]};
+short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[7924]};
 short adx_buffer_used[6];
 
 void	driver_data_init(void)
@@ -624,7 +628,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 			target_adx = f;
 			adx[f].pcm_number = pcm_control_index;
 			adx[f].status = ADX_STATUS_ACTIVE;
-			if(snd->bytes_per_blank == 256)
+			if(snd->bytes_per_blank == 256 || snd->bytes_per_blank == 192 || snd->bytes_per_blank == 128)
 			{
 				//Find two free slots
 				for(short l = 0; l < 6; l++)
@@ -662,6 +666,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 					driver_end_sound(&snd->icsr_target, snd);
 					return;
 				}
+				adx[f].whippet_point = (snd->bytes_per_blank == 256) ? 350 : (snd->bytes_per_blank == 192) ? 450 : 900;
 			} else if(snd->bytes_per_blank == 384)
 			{
 				//Find three free slots
@@ -695,6 +700,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 					driver_end_sound(&snd->icsr_target, snd);
 					return;
 				}
+				adx[f].whippet_point = snd->bytes_per_blank;
 			} else if(snd->bytes_per_blank == 512)
 			{
 				//Find four free slots
@@ -730,6 +736,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 					driver_end_sound(&snd->icsr_target, snd);
 					return;
 				}
+				adx[f].whippet_point = snd->bytes_per_blank;
 			} else if(snd->bytes_per_blank == 768)
 			{
 				//Only work if no slots are used
@@ -759,7 +766,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 					adx[f].buf_string[0] = 0;
 					adx[f].buf_string[1] = 5;
 				}
-
+				adx[f].whippet_point = snd->bytes_per_blank;
 			} else {
 				//Invalid byte-rate
 					adx[f].pcm_number = -1;
@@ -927,23 +934,27 @@ void	play_adx(short pcm_control_index, short loop_type)
 		//
 		// The Whippet
 		// Honestly, this is an imprecise piece of the equation.
-		// This is needed because the SCSP consumes data at a rate slower than bytes_per_blank.
+		// This is needed because the SCSP consumes data at a rate faster than bytes_per_blank.
 		// It does that because the SCSP's clock rate is effectively tuned to 44.1KHz audio.
 		// The rates we use to attempt to get perfect numbers of bytes per vertical blank don't equate perfectly to the SCSP's clock rate.
 		// However, I could not manage to get a correct calculation for the actual rate at which the SCSP will consume data.
 		// We still need to compensate for this flaw that our code assumes perfect bytes consumed per blank.
-		// We have a pretty big buffer, so there's decent margin for error.
-		// This code just assumes every time the # of blanks pass that equate to the number of bytes consumed every blank,
-		// that we should assume the SCSP has consumed one less blank of bytes. 
-		// Yet, we **add** to the bytes per blank? Yes! It works! Don't ask!
-		//
+		// I genuinely can't get sensible whippet calculations.
+		
+		// 3840 Hz 		~ 895
+		// 5760 Hz		~ 450
+		// 7680 Hz		~ 350
+		// 11520 Hz		~ Bytes per blank
+		// 15360 Hz		~ Bytes per blank
+		// 23040 Hz		~ Bytes per blank
+		//	Why at 11520, 15360, and 23040 is bytes per blank the perfect offset, yet below that it is wildly off?
 		adx[target_adx].whippet_frame += 1;
-		if(adx[target_adx].whippet_frame >= snd->bytes_per_blank)
+		if(adx[target_adx].whippet_frame >= adx[target_adx].whippet_point)
 		{
 			adx[target_adx].work_play_pt += snd->bytes_per_blank;
 			adx[target_adx].whippet_frame = 0;
 		}
-		sh2Com->drv_adx_coef_1 = adx[target_adx].whippet_frame;
+		// sh2Com->drv_adx_coef_1 = adx[target_adx].whippet_frame;
 		adx[target_adx].work_play_pt += snd->bytes_per_blank;
 		///////////////////////////////////////
 		// ADX Decompression Starting
@@ -962,7 +973,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		if(adx[target_adx].work_decomp_pt >= adx[target_adx].decomp_space)
 		{
 			adx[target_adx].status ^= ADX_STATUS_DECOMP;
-			adx[target_adx].work_decomp_pt = 0;
+			adx[target_adx].work_decomp_pt -= snd->decompression_size;
 			adx[target_adx].dst = adx[target_adx].original_dst;
 		}
 		///////////////////////////////////////
@@ -972,7 +983,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 		// We know this because the SCSP has been set to play back this region of sound as a loop.
 		if(adx[target_adx].work_play_pt >= adx[target_adx].decomp_space)
 		{
-			adx[target_adx].work_play_pt = 0;
+			adx[target_adx].work_play_pt -= snd->decompression_size;
 		}
 		///////////////////////////////////////
 		// ADX End Condition
