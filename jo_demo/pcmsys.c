@@ -89,6 +89,32 @@ void	pcm_cease(short pcmNumber)
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 0; //If it is a looping sound, the control method is to command it to stop.
 	}
 }
+
+//
+// Usage:
+// Intended as the "level reset" function.
+// Does not soft or hard reset driver. To do that, re-load the driver binary (run load_drv again).
+// This instead resets the loading pointer and number of PCMs to a specific PCM number.
+// In use with proper sequence of asset loading, a certain number of sound assets can be retained in sound memory, with others discarded.
+// 
+// The argument "highest_pcm_number_to_keep" is the latest sequentially loaded PCM in sound RAM that signals the point at which:
+// Any PCM number loaded earlier than this will be kept in memory and its number still valid to play the sound.
+// Any PCM number loaded later than this will be ignored in memory when loading new sounds, but the number is still valid to play sound.
+void	pcm_reset(short highest_pcm_number_to_keep)
+{
+	numberPCMs = highest_pcm_number_to_keep+1;
+	scsp_load = (unsigned int *)((unsigned int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].hiAddrBits<<16) | (int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].loAddrBits));
+	if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 2) 
+	{ //If this is an ADX sound, offset the loading pointer by # of frames by 18. Address includes 18-byte header offset.
+		scsp_load = (unsigned int *)((unsigned int)scsp_load + (m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize * 18));
+	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 1)
+	{ //If this is an 8-bit PCM, offset the loading pointer by the playsize, exactly (one byte samples).
+		scsp_load = (unsigned int *)((unsigned int)scsp_load + m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize);
+	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 0)
+	{ //If this is a 16-bit PCM, offset the loading pointer by the playsize, shifted left once (two byte samples).
+		scsp_load = (unsigned int *)((unsigned int)scsp_load + (m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize<<1));
+	}
+}
 	
 /**stolen from xl2**/
 #define     OPEN_MAX    (Sint32)5
@@ -181,10 +207,13 @@ void			load_drv(int master_adx_frequency)
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer, master_adx_frequency);
 	m68k_com->start = 0xFFFF;
 	volatile int i = 0;
+	scsp_load = (unsigned int*)(0x408 + DRV_SYS_END + 0x20); // Re-set loading pointer.
 	for(i = 0; i < (int)scsp_load; i++)
 	{
 		//This is to pop the stack here. Because GCC.
 	}
+	//Additionally, reset the number of PCMs.
+	numberPCMs = 0;
 }
 
 short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL)
@@ -212,6 +241,7 @@ short			convert_bitrate_to_pitchword(short sampleRate)
 short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
+	if( numberPCMs >= PCM_CTRL_MAX) return -1; //Maximum number of PCMs reached, exit
 
 	GfsHn s_gfs;
 	Sint32 file_size;
@@ -251,6 +281,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 {
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
+	if( numberPCMs >= PCM_CTRL_MAX) return -1; //Maximum number of PCMs reached, exit
 
 	GfsHn s_gfs;
 	Sint32 file_size;
@@ -309,6 +340,7 @@ short		load_adx(Sint8 * filename)
 	static adx_header adx;
 	
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
+	if( numberPCMs >= PCM_CTRL_MAX) return -1; //Maximum number of PCMs reached, exit
 
 	Sint32 local_name = GFS_NameToId(filename);
 

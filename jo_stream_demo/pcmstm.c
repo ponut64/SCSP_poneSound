@@ -368,8 +368,6 @@ void		sdrv_stm_vblank_rq(void)
 	{
 		operate_adx_stream();
 	}
-	//jo_printf(0, 0, "drv_stat(%i)", m68k_com->start);
-	m68k_com->start = 1;	
 }
 
 void		pcm_stream_host(void(*game_code)(void))

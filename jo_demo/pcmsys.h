@@ -53,7 +53,7 @@
 #define PCMEND	(SNDRAM + 0x7F000)
 //////////////////////////////////////////////////////////////////////////////
 #define DRV_SYS_END (47 * 1024) //System defined safe end of driver's address space
-#define PCM_CTRL_MAX (64)
+#define PCM_CTRL_MAX (93)
 //////////////////////////////////////////////////////////////////////////////
 #define	PCM_ALT_LOOP	(3)
 #define PCM_RVS_LOOP	(2)
@@ -109,7 +109,7 @@
 
 typedef struct {
 	char loopType; //[0,1,2,3] No loop, normal loop, reverse loop, alternating loop
-	unsigned char bitDepth; //0 or 1, boolean
+	unsigned char bitDepth; //0, 1, or 2; 0 is 16-bit, 1 is 8-bit, 2 is ADX
 	unsigned short hiAddrBits; //bits 19-16 of...
 	unsigned short loAddrBits; //Two 16-bit chunks that when combined, form the start address of the sound.
 	unsigned short LSA; //The # of samples forward from the start address to return to after loop.
@@ -183,6 +183,18 @@ void	load_drv(int master_adx_frequency);
 void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);
 void	pcm_cease(short pcmNumber);
+
+//
+// Usage:
+// Intended as the "level reset" function.
+// Does not soft or hard reset driver. To do that, re-load the driver binary (run load_drv again).
+// This instead resets the loading pointer and number of PCMs to a specific PCM number.
+// In use with proper sequence of asset loading, a certain number of sound assets can be retained in sound memory, with others discarded.
+// 
+// The argument "highest_pcm_number_to_keep" is the latest sequentially loaded PCM in sound RAM that signals the point at which:
+// Any PCM number loaded earlier than this will be kept in memory and its number still valid to play the sound.
+// Any PCM number loaded later than this will be ignored in memory when loading new sounds, but the number is still valid to play sound.
+void	pcm_reset(short default_pcm_count);
 
 void	sdrv_vblank_rq(void);
 

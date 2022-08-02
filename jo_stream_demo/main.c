@@ -134,6 +134,7 @@ void			jo_main(void)
 	my_load();
 
 	jo_core_add_vblank_callback(sdrv_stm_vblank_rq);
+	jo_core_add_vblank_callback(sdrv_vblank_rq);
 	pcm_stream_init(30720, PCM_TYPE_8BIT);
 	pcm_stream_host(my_draw);
 }
