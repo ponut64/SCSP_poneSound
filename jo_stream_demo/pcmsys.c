@@ -50,7 +50,8 @@ static const int logtbl[] = {
 		((int)((PCM_MSK4(-(oct)) << 11) | PCM_MSK10(fns)))
 		
 	sysComPara * m68k_com = (sysComPara *)((SNDPRG + DRV_SYS_END) | 0x20000000);
-	unsigned int * scsp_load =  (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
+	static unsigned int * scsp_loading_start = (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
+	unsigned int * scsp_load;
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
 	short numberPCMs = 0;
 	
@@ -100,13 +101,16 @@ void	pcm_cease(short pcmNumber)
 // The argument "highest_pcm_number_to_keep" is the latest sequentially loaded PCM in sound RAM that signals the point at which:
 // Any PCM number loaded earlier than this will be kept in memory and its number still valid to play the sound.
 // Any PCM number loaded later than this will be ignored in memory when loading new sounds, but the number is still valid to play sound.
+// Pass -1 to this function to clear all PCMs.
 void	pcm_reset(short highest_pcm_number_to_keep)
 {
 	numberPCMs = highest_pcm_number_to_keep+1;
 	scsp_load = (unsigned int *)((unsigned int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].hiAddrBits<<16) | (int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].loAddrBits));
-	if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 2) 
+	if(highest_pcm_number_to_keep < 0) {
+		scsp_load = scsp_loading_start;
+		numberPCMs = 0;
+	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 2) 
 	{ //If this is an ADX sound, offset the loading pointer by # of frames by 18. Address includes 18-byte header offset.
-		scsp_load = (unsigned int *)((unsigned int)scsp_load + (m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize * 18));
 	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 1)
 	{ //If this is an 8-bit PCM, offset the loading pointer by the playsize, exactly (one byte samples).
 		scsp_load = (unsigned int *)((unsigned int)scsp_load + m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize);
@@ -207,7 +211,7 @@ void			load_drv(int master_adx_frequency)
 	load_driver_binary((Sint8*)"SDRV.BIN", binary_buffer, master_adx_frequency);
 	m68k_com->start = 0xFFFF;
 	volatile int i = 0;
-	scsp_load = (unsigned int*)(0x408 + DRV_SYS_END + 0x20); // Re-set loading pointer.
+	scsp_load = scsp_loading_start; // Re-set loading pointer.
 	for(i = 0; i < (int)scsp_load; i++)
 	{
 		//This is to pop the stack here. Because GCC.
