@@ -104,13 +104,18 @@ void	pcm_cease(short pcmNumber)
 // Pass -1 to this function to clear all PCMs.
 void	pcm_reset(short highest_pcm_number_to_keep)
 {
-	numberPCMs = highest_pcm_number_to_keep+1;
-	scsp_load = (unsigned int *)((unsigned int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].hiAddrBits<<16) | (int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].loAddrBits));
+	//For clearing all sounds, input is negative
 	if(highest_pcm_number_to_keep < 0) {
 		scsp_load = scsp_loading_start;
 		numberPCMs = 0;
-	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 2) 
+		return;
+	}
+	
+	numberPCMs = highest_pcm_number_to_keep+1;
+	scsp_load = (unsigned int *)((unsigned int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].hiAddrBits<<16) | (int)(m68k_com->pcmCtrl[highest_pcm_number_to_keep].loAddrBits));
+	if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 2) 
 	{ //If this is an ADX sound, offset the loading pointer by # of frames by 18. Address includes 18-byte header offset.
+		scsp_load = (unsigned int *)((unsigned int)scsp_load + (m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize * 18)); 
 	} else if(m68k_com->pcmCtrl[highest_pcm_number_to_keep].bitDepth == 1)
 	{ //If this is an 8-bit PCM, offset the loading pointer by the playsize, exactly (one byte samples).
 		scsp_load = (unsigned int *)((unsigned int)scsp_load + m68k_com->pcmCtrl[highest_pcm_number_to_keep].playsize);
