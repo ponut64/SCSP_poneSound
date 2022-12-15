@@ -504,7 +504,7 @@ void		pcm_stream_host(void(*game_code)(void))
 			{
 			//This branch is for serving an active file request from CD to RAM.
 			GFS_NwFread(file.handle, file_transfer_sector,
-			file.destination + (file.sectors_read_so_far * file_transfer_size), file_transfer_size);
+			file.destination + (file.sectors_read_so_far * 2048), file_transfer_size);
 				do{
 					game_code();
 						jo_printf(16, 2, "--FILE--");
