@@ -33,4 +33,4 @@ jo_stream_demo, which is a demonstration of the streaming libraries.
 
 Linker script from CyberWarriorX
 
-Compiler from SGDK, GCC 6.3 - it has some bugs.
+Compiler was dug up from the internet.
