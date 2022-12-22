@@ -197,8 +197,8 @@ volatile sysComPara * sh2Com = (volatile sysComPara  *)(ADDR_PRG + DRV_SYS_END);
 volatile _ICSR * csr = (volatile _ICSR *)0x100000; //There are 32 of these.
 //
 _PCM_CTRL	pcmCtrlData[PCM_CTRL_MAX + ADX_CTRL_MAX];
-char		ICSR_Busy[32];
-char		icsr_index = 0;
+short		ICSR_Busy[32];
+short		icsr_index = 0;
 short		loopingPCMs[PCM_CTRL_MAX];
 short		volatilePCMs[PCM_CTRL_MAX];
 short		adxPCMs[PCM_CTRL_MAX];
@@ -261,6 +261,23 @@ short adx_dummy[ADX_CTRL_MAX];
 */
 short * adx_buf_addr[3] = {&adx_work_buf[0], &adx_work_buf[4608], &adx_work_buf[7924]};
 short adx_buffer_used[6];
+
+
+//This function is here, you know, just in case.
+// int		multiply(short data1, short data2)
+// {
+	// register volatile int out;
+	// asm(
+	// "mulsw %[data1],%[data2];"
+	// "mov.l %[data2],%[out];"
+    // :    [out] "=X" (out),  [data2] "=d" (data2)	//OUT
+    // :    [data1] "d" (data1)						//IN
+	// :	 											//CLOBBERS
+	// );
+	// return out;
+// }
+
+ 
 
 void	driver_data_init(void)
 {
@@ -329,7 +346,7 @@ void	driver_data_init(void)
 	//Filling coef table 1
 	int coef_1 = sh2Com->drv_adx_coef_1;
 	int coef_2 = sh2Com->drv_adx_coef_2;
-	for(int a = -32768; a < 32768; a++)
+	for(int a = 32767; a > -32768; a--)
 	{
 		int temp_value = (a * coef_1)>>12;
 		temp_value = (temp_value > 32767) ? 32767 : (temp_value < -32768) ? -32768 : temp_value;
@@ -338,7 +355,7 @@ void	driver_data_init(void)
 		last_shift = a>>4;
 	}
 	//Filling coef table 2
-	for(int a = -32768; a < 32768; a++)
+	for(int a = 32767; a > -32768; a--)
 	{
 		int temp_value = (a * coef_2)>>12;
 		temp_value = (temp_value > 32767) ? 32767 : (temp_value < -32768) ? -32768 : temp_value;

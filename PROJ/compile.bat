@@ -1,4 +1,4 @@
-SET COMPILER_DIR=..\m68k-2\
+SET COMPILER_DIR=D:\68k\m68k-elf
 SET PATH=%COMPILER_DIR%;%cd%
-make -f makefile srcs
+make -f D:\68k\PROJ\makefile srcs
 PAUSE
