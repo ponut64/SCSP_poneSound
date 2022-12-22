@@ -277,6 +277,11 @@ short adx_buffer_used[6];
 	// return out;
 // }
 
+// I am aware this clamps a little short on signed 16-bit integer.
+inline	int clamp_to_16bit(register int input)
+{
+		return ((input > 32767) ? 32767 : (input < -32767) ? -32767 : input);
+}
  
 
 void	driver_data_init(void)
@@ -349,7 +354,7 @@ void	driver_data_init(void)
 	for(int a = 32767; a > -32768; a--)
 	{
 		int temp_value = (a * coef_1)>>12;
-		temp_value = (temp_value > 32767) ? 32767 : (temp_value < -32768) ? -32768 : temp_value;
+		temp_value = clamp_to_16bit(temp_value);
 		if(a>>4 == last_shift) continue;
 		center_coef_1[a>>4] = (short)temp_value;
 		last_shift = a>>4;
@@ -358,7 +363,7 @@ void	driver_data_init(void)
 	for(int a = 32767; a > -32768; a--)
 	{
 		int temp_value = (a * coef_2)>>12;
-		temp_value = (temp_value > 32767) ? 32767 : (temp_value < -32768) ? -32768 : temp_value;
+		temp_value = clamp_to_16bit(temp_value);
 		if(a>>4 == last_shift) continue;
 		center_coef_2[a>>4] = (short)temp_value;
 		last_shift = a>>4;
@@ -384,7 +389,6 @@ static short last_scale = 0;
 short scale = *adx->src++;
 register short hist1 = adx->last_sample;
 register short hist2 = adx->last_last_sample;
-register short histi;
 register int sample_raw;
 register short delta1;
 register short delta2;
@@ -414,47 +418,41 @@ for (short i = 0; i < 8; i++)
    /* Even samples use the high nibble. */
    /* Each nibble is a 4 bit two's complement signed value. */
    /* Due to big-endian data, the first nibbles come from the more significant byte */
-	delta1 = scale_table[(sample_short & 0xF000) >> 12];
-	delta2 = scale_table[(sample_short & 0xF00) >> 8];
-	delta3 = scale_table[(sample_short & 0xF0) >> 4];
+	delta1 = scale_table[(sample_short >> 12) & 0xF];
+	delta2 = scale_table[(sample_short >> 8) & 0xF];
+	delta3 = scale_table[(sample_short >> 4) & 0xF];
 	delta4 = scale_table[sample_short & 0xF];
+	//We do not need to check the histories for their sign, as the tables themselves are signed.
+	/*
+	
+	A special note for anyone who tries to pick up on this:
+	I am well aware that playing back ADX via this driver has a huge playback issue;
+	When the sound effect has samples which reach the peak or floor of volume.
+	In these cases, the output becomes crackly or garbled, and is generally "blown out".
+	I do know that even if you do not use the coefficient multiplication tables, the issue persists!
+	But if you play the sounds back with WinAmp or back as an uncompressed sound, the issue is not present.
+	I suspect this is because either Windows or WinAmp has a high-pass filter or limiter to prevent this from happening.
+	Because, near as I can tell, if you follow the algorithm it is present in the data anyway.
+	It could also be a simple issue relating to how the SCSP interprets extreme samples (or sample deltas).
+	
+	*/
 	////////////////////////////////////////////////////////////////////////////////////////////
-	//The data of hist1 is kept, so use another register.
-	histi = center_coef_1[hist1]; //We do not need to check the histories for their sign, as the tables themselves are signed.
-	//The data of hist2 is discarded, so use the same register.
-	hist2 = center_coef_2[hist2]; //We do not need to check the histories for their sign, as the tables themselves are signed.
-	sample_raw = histi + hist2 + delta1;
-	sample_raw = (sample_raw > 32767) ? 32767 : (sample_raw < -32768) ? -32768 : sample_raw;
+	sample_raw = clamp_to_16bit(center_coef_1[hist1] + center_coef_2[hist2] + delta1);
 	hist2 = hist1;
 	hist1 = sample_raw>>4;
 	*adx->dst++ = sample_raw;
 	////////////////////////////////////////////////////////////////////////////////////////////
-	//The data of hist1 is kept, so use another register.
-	histi = center_coef_1[hist1];
-	//The data of hist2 is discarded, so use the same register.
-	hist2 = center_coef_2[hist2];
-	sample_raw = histi + hist2 + delta2;
-	sample_raw = (sample_raw > 32767) ? 32767 : (sample_raw < -32768) ? -32768 : sample_raw;
+	sample_raw = clamp_to_16bit(center_coef_1[hist1] + center_coef_2[hist2] + delta2);
 	hist2 = hist1;
 	hist1 = sample_raw>>4;
 	*adx->dst++ = sample_raw;
 	////////////////////////////////////////////////////////////////////////////////////////////
-	//The data of hist1 is kept, so use another register.
-	histi = center_coef_1[hist1];
-	//The data of hist2 is discarded, so use the same register.
-	hist2 = center_coef_2[hist2];
-	sample_raw = histi + hist2 + delta3;
-	sample_raw = (sample_raw > 32767) ? 32767 : (sample_raw < -32768) ? -32768 : sample_raw;
+	sample_raw = clamp_to_16bit(center_coef_1[hist1] + center_coef_2[hist2] + delta3);
 	hist2 = hist1;
 	hist1 = sample_raw>>4;
 	*adx->dst++ = sample_raw;
 	////////////////////////////////////////////////////////////////////////////////////////////
-	//The data of hist1 is kept, so use another register.
-	histi = center_coef_1[hist1];
-	//The data of hist2 is discarded, so use the same register.
-	hist2 = center_coef_2[hist2];
-	sample_raw = histi + hist2 + delta4;
-	sample_raw = (sample_raw > 32767) ? 32767 : (sample_raw < -32768) ? -32768 : sample_raw;
+	sample_raw = clamp_to_16bit(center_coef_1[hist1] + center_coef_2[hist2] + delta4);
 	hist2 = hist1;
 	hist1 = sample_raw>>4;
 	*adx->dst++ = sample_raw;
