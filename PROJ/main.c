@@ -914,7 +914,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 			// The playsize of the ADX PCM control slot contains the # of ADX frames of the sound.
 			// If the current frame being decompressed is greater than this, the sound has been fully decompressed.
 			// The status is updated as such, and no more ADX frames are to be decompressed (there are no more!).
-			if(adx[target_adx].current_frame > snd->playsize && loop_type != ADX_STREAM)
+			if(adx[target_adx].current_frame >= snd->playsize && loop_type != ADX_STREAM)
 			{
 				adx[target_adx].status |= ADX_STATUS_FULL;
 				break;
@@ -930,7 +930,7 @@ void	play_adx(short pcm_control_index, short loop_type)
 				{
 					sh2Com->adx_buffer_pass[0] = 1; //Communicate to stream manager software on SH2 that segment 0 (half-way point) is passed.
 				}
-				if(adx[target_adx].current_frame > sh2Com->adx_stream_length)
+				if(adx[target_adx].current_frame >= sh2Com->adx_stream_length)
 				{
 					adx[target_adx].status |= ADX_STATUS_FULL;
 					break;
@@ -992,15 +992,6 @@ void	play_adx(short pcm_control_index, short loop_type)
 			adx[target_adx].dst = adx[target_adx].original_dst;
 		}
 		///////////////////////////////////////
-		// ADX Play Tracking
-		// If the maximal position of the SCSP in the playback buffer will have met or exceeded the size of it,
-		// we **know** the SCSP is going to go back to the beginning of the buffer.
-		// We know this because the SCSP has been set to play back this region of sound as a loop.
-		if(adx[target_adx].work_play_pt >= adx[target_adx].decomp_space)
-		{
-			adx[target_adx].work_play_pt -= snd->decompression_size;
-		}
-		///////////////////////////////////////
 		// ADX End Condition
 		// When we have decompressed all the data from the ADX sound,
 		// we have flagged the ADX status as FULL. The sound has been fully decompressed.
@@ -1022,6 +1013,16 @@ void	play_adx(short pcm_control_index, short loop_type)
 			} else {
 			adx[target_adx].status = ADX_STATUS_END;
 			}
+		}
+		///////////////////////////////////////
+		// ADX Play Tracking
+		// If the maximal position of the SCSP in the playback buffer will have met or exceeded the size of it,
+		// we **know** the SCSP is going to go back to the beginning of the buffer.
+		// We know this because the SCSP has been set to play back this region of sound as a loop.
+		// This also must be after we check the end condition for a sound, because if it is not, the sound will loop into old data.
+		if(adx[target_adx].work_play_pt >= adx[target_adx].decomp_space)
+		{
+			adx[target_adx].work_play_pt -= snd->decompression_size;
 		}
 		////////////////////////////////////////
 		// ADX Parameter / Volume Update

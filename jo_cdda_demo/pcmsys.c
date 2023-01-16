@@ -69,6 +69,7 @@ static short adx_coef_tbl[8][2] =
 	
 void	pcm_play(short pcmNumber, char ctrlType, char volume)
 {
+	if(pcmNumber < 0) return;
 	m68k_com->pcmCtrl[pcmNumber].sh2_permit = 1;
 	m68k_com->pcmCtrl[pcmNumber].volume = volume;
 	m68k_com->pcmCtrl[pcmNumber].loopType = ctrlType;
@@ -76,13 +77,14 @@ void	pcm_play(short pcmNumber, char ctrlType, char volume)
 
 void	pcm_parameter_change(short pcmNumber, char volume, char pan)
 {
+	if(pcmNumber < 0) return;
 	m68k_com->pcmCtrl[pcmNumber].volume = volume;
 	m68k_com->pcmCtrl[pcmNumber].pan = pan;
 }
 
 void	pcm_cease(short pcmNumber)
 {
-
+	if(pcmNumber < 0) return;
 	if(m68k_com->pcmCtrl[pcmNumber].loopType <= 0) //If it is a volatile or protected sound, the expected control method is to mute the sound and let it end itself.
 	{												//Protected sounds have a permission state of "until they end".
 	m68k_com->pcmCtrl[pcmNumber].volume = 0;
@@ -384,7 +386,8 @@ short		load_adx(Sint8 * filename)
 		return -2;
 	}
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = bpb;
-	m68k_com->pcmCtrl[numberPCMs].decompression_size = (bpb >= 256) ? lcm(bpb, bpb + 64)<<1 : 5376; // Dirty fix for ultra low bitrate
+	unsigned short big_dct_sz = (bpb >= 256) ? lcm(bpb, bpb + 64)<<1 : 5376; // Dirty fix for ultra low bitrate
+	m68k_com->pcmCtrl[numberPCMs].decompression_size = (big_dct_sz > (adx.sample_ct<<1)) ? adx.sample_ct<<1 : big_dct_sz;
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_ADX; //Select ADX type
 	m68k_com->pcmCtrl[numberPCMs].loopType = PCM_SEMI; //Initialize as semi-protected.
 	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
