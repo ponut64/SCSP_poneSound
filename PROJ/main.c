@@ -3,10 +3,10 @@
 #define ADDR_STACK (0x80000 - 0x400)
 #define ADDR_END   (0x80000)
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Big credit to cWx :: cyberWarriorX for a sound driver prototype and most
 // importatly, the linker script!
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 int *vecTable[256]
   __attribute__((section("VECTORS"))) = {(int *) ADDR_STACK, (int *) ADDR_PRG, (int *) ADDR_END, (int *) ADDR_END,
@@ -59,9 +59,10 @@ int *vecTable[256]
 
 void lead_function(void) // Link start to main
 {
-  __asm__("jmp _start"); // note that _start is the ASM label that equates to
-                         // the lead function in this compiler. In a normal
-                         // compiler, it would be "main".
+  // note that _start is the ASM label that equates to
+  // the lead function in this compiler. In a normal
+  // compiler, it would be "main".
+  __asm__("jmp _start");
 }
 
 // Place all includes past this line
@@ -314,12 +315,14 @@ void driver_data_init(void) {
   // I'm so bad at C it took me an hour to realize I had to typecast this
   // Assignment is for the SH2, so it adds the SNDRAM base uncached address.
   sh2Com->pcmCtrl = (_PCM_CTRL *) ((unsigned int) &pcmCtrlData[0] + 0x25A00000);
+
   // Set "start" to a specific number during start up to communicate the driver
   // is initailizing.
   sh2Com->start = 0xFFFF;
   for (char i = 0; i < 32; i++) {
     ICSR_Busy[i] = -1;
     dataTimers[i] = 0;
+
     // Soft-reset safety clear of sound slot information; contributed by fafling
     csr[i].keys = 0;
     csr[i].start_addr = 0;
@@ -501,7 +504,7 @@ void decompress_adx_frame(_ADX_CTRL *adx) {
 #pragma GCC pop_options
 
 void driver_end_sound(volatile char *cst, _PCM_CTRL *lctrl) {
-  csr[*cst].keys = (0);      // Key select OFF
+  csr[*cst].keys = 0;        // Key select OFF
   csr[*cst].keys |= 1 << 12; // Key EXECUTE OFF
   ICSR_Busy[*cst] = -1;      // Flag this ICSR as no longer busy
   dataTimers[*cst] = 0;      // Clear playback timer
@@ -510,45 +513,50 @@ void driver_end_sound(volatile char *cst, _PCM_CTRL *lctrl) {
 }
 
 void driver_stop_slot(volatile char *cst) {
-  csr[*cst].keys = (0);      // Key select OFF
+  csr[*cst].keys = 0;        // Key select OFF
   csr[*cst].keys |= 1 << 12; // Key EXECUTE OFF
   dataTimers[*cst] = 0;
 }
 
 short find_free_slot(_PCM_CTRL *lctrl) {
-  //
-  while (ICSR_Busy[icsr_index] != -1) // Find an inactive channel for the sound
-  {
-    icsr_index++; // Set forward the icsr_index until it has reached an inactive
-                  // ICSR
+  // Find an inactive channel for the sound
+  while (ICSR_Busy[icsr_index] != -1) {
+    // Set forward the icsr_index until it has reached an inactive ICSR
+    icsr_index++;
   }
+
   // If there is no free ICSR, leave the function -- leaving the ICSR set to -1.
   if (icsr_index >= 32)
     return -1;
-  //
+
   // Give sound an ICSR index
   lctrl->icsr_target = icsr_index;
   return 1;
 }
 
-void driver_start_slot_with_sound(volatile char *cst, _PCM_CTRL *lctrl) {
-  csr[*cst].keys =
-    (1 << 11 | lctrl->bitDepth << 4 | lctrl->hiAddrBits); // Key select ON | Bit depth | high bits of address
-  csr[*cst].start_addr = lctrl->loAddrBits;
-  csr[*cst].loop_start = lctrl->LSA;
-  csr[*cst].playsize = lctrl->playsize - 1; // "-1" to correct for the SCSP's pipeline. Helps that
-                                            // the linked library won't have to worry.
-  csr[*cst].oct_fns = lctrl->pitchword;     // It would be possible to include a pseudorandom table to
-                                            // randomize the pitch slightly. The octave is in this
-                                            // word, so that's what you would change for randomized
-                                            // pitch. +1 or -1.
-  csr[*cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8));
+void driver_start_slot_with_sound(volatile char cst, _PCM_CTRL *lctrl) {
+  // Key select ON | Bit depth | high bits of address
+  csr[cst].keys = (1 << 11 | lctrl->bitDepth << 4 | lctrl->hiAddrBits);
+  csr[cst].start_addr = lctrl->loAddrBits;
+  csr[cst].loop_start = lctrl->LSA;
 
-  csr[*cst].decay_1_2_attack = 31;  // We could skip writing these and specify direct data playback,
-  csr[*cst].key_decay_release = 31; // but as far as I understand, this removes
-                                    // sound panning. Attenuation, bit 9 [SD].
+  // "-1" to correct for the SCSP's pipeline. Helps that the linked library won't have to worry.
+  csr[cst].playsize = lctrl->playsize - 1;
 
-  csr[*cst].keys |= 1 << 12; // KEY EXECUTE must be written last.
+  // It would be possible to include a pseudorandom table to
+  // randomize the pitch slightly. The octave is in this
+  // word, so that's what you would change for randomized
+  // pitch. +1 or -1.
+  csr[cst].oct_fns = lctrl->pitchword;
+  csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8));
+
+  // We could skip writing these and specify direct data playback, but as far as I understand, this removes sound
+  // panning. Attenuation, bit 9 [SD].
+  csr[cst].decay_1_2_attack = 31;
+  csr[cst].key_decay_release = 31;
+
+  // KEY EXECUTE must be written last.
+  csr[cst].keys |= 1 << 12;
 }
 
 // This function is for non-looping sounds that will restart every time the
@@ -564,7 +572,7 @@ void play_volatile_sound(_PCM_CTRL *lctrl) {
   short cst = lctrl->icsr_target;
 
   driver_stop_slot(&lctrl->icsr_target);
-  driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
+  driver_start_slot_with_sound(lctrl->icsr_target, lctrl);
 
   csr[cst].keys |= 1 << 12; // KEY EXECUTE must be written last.
   lctrl->sh2_permit = 0;    // Disallow sound
@@ -580,7 +588,7 @@ void play_protected_sound(short index) {
   // it up.
   if (ICSR_Busy[cst] != index) {
     driver_stop_slot(&lctrl->icsr_target);
-    driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
+    driver_start_slot_with_sound(lctrl->icsr_target, lctrl);
 
   } else {
     // Allow live volume and pitch adjustment of semi protected soundssounds
@@ -607,7 +615,7 @@ void play_semi_protected_sound(short index) {
   short cst = lctrl->icsr_target;
   if (lctrl->sh2_permit == 1) {
     driver_stop_slot(&lctrl->icsr_target);
-    driver_start_slot_with_sound(&lctrl->icsr_target, lctrl);
+    driver_start_slot_with_sound(lctrl->icsr_target, lctrl);
 
     // With semi-protected sound, the SH2 can command the sound to re-start.
     // To facilitate this, the permission boolean is set to 0 in antipication of
@@ -634,32 +642,46 @@ void play_semi_protected_sound(short index) {
 void set_looping_sound(short index) {
   _PCM_CTRL *lctrl = &pcmCtrlData[index];
   short cst = lctrl->icsr_target;
+
   // This ICSR is not presently associated with the looping sound, so we
   // decimate its current playback.
   if (ICSR_Busy[cst] != index) {
-    csr[cst].keys = (0);      // Key select OFF
-    csr[cst].keys |= 1 << 12; // Key EXECUTE OFF
+    // Key select OFF
+    csr[cst].keys = 0;
+
+    // Key EXECUTE OFF
+    csr[cst].keys |= 1 << 12;
   }
+
   // Then, set up the sound.
+  // Key select ON | loop type | Bit
+  // depth | high bits of address
   csr[cst].keys =
-    (1 << 11 | lctrl->loopType << 5 | lctrl->bitDepth << 4 | lctrl->hiAddrBits); // Key select ON | loop type | Bit
-                                                                                 // depth | high bits of address
+    (1 << 11 | lctrl->loopType << 5 | lctrl->bitDepth << 4 | lctrl->hiAddrBits);
+
   csr[cst].start_addr = lctrl->loAddrBits;
   csr[cst].loop_start = lctrl->LSA;
   csr[cst].playsize = lctrl->playsize - 1;
-  csr[cst].oct_fns = lctrl->pitchword; // It would be possible to include a pseudorandom table to
-                                       // randomize the pitch slightly. The octave is in this
-                                       // word, so that's what you would change for randomized
-                                       // pitch. +1 or -1.
+
+  // It would be possible to include a pseudorandom table to
+  // randomize the pitch slightly. The octave is in this
+  // word, so that's what you would change for randomized
+  // pitch. +1 or -1.
+  csr[cst].oct_fns = lctrl->pitchword; 
   csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8));
 
-  csr[cst].decay_1_2_attack = 31;  // We could skip writing these and specify direct data playback,
-  csr[cst].key_decay_release = 31; // but as far as I understand, this removes
-                                   // sound panning. Attenuation, bit 9 [SD].
+  // We could skip writing these and specify direct data playback,
+  csr[cst].decay_1_2_attack = 31;
 
-  csr[cst].keys |= 1 << 12; // KEY EXECUTE must be written last.
+  // but as far as I understand, this removes
+  // sound panning. Attenuation, bit 9 [SD].
+  csr[cst].key_decay_release = 31;
 
-  ICSR_Busy[cst] = index; // Associate this ICSR with the looping sound
+  // KEY EXECUTE must be written last.
+  csr[cst].keys |= 1 << 12;
+
+  // Associate this ICSR with the looping sound
+  ICSR_Busy[cst] = index;
 }
 
 void play_adx(short pcm_control_index, short loop_type) {
@@ -913,7 +935,9 @@ void play_adx(short pcm_control_index, short loop_type) {
       i += 64;
       adx[target_adx].current_frame += 1;
     }
+
     adx[target_adx].work_decomp_pt += adx[target_adx].decomp_demand;
+
     // ADX dummy 1 being a looping PCM control set to point at the adx work buf.
     pcmCtrlData[adx_dummy[target_adx]].playsize = ((adx[target_adx].decomp_space) >> 1);
     pcmCtrlData[adx_dummy[target_adx]].pitchword = snd->pitchword;
@@ -923,6 +947,7 @@ void play_adx(short pcm_control_index, short loop_type) {
     pcmCtrlData[adx_dummy[target_adx]].icsr_target = snd->icsr_target;
     pcmCtrlData[adx_dummy[target_adx]].loAddrBits = (unsigned short) ((unsigned int) adx[target_adx].original_dst);
     adx[target_adx].whippet_frame = 0;
+
     set_looping_sound(adx_dummy[target_adx]);
     adx[target_adx].status ^= ADX_STATUS_START;
     adx[target_adx].status |= (ADX_STATUS_PLAY | ADX_STATUS_DECOMP);
@@ -957,11 +982,13 @@ void play_adx(short pcm_control_index, short loop_type) {
           sh2Com->adx_buffer_pass[0] = 1; // Communicate to stream manager software on SH2 that segment 0
                                           // (half-way point) is passed.
         }
+
         if (adx[target_adx].current_frame >= sh2Com->adx_stream_length) {
           adx[target_adx].status |= ADX_STATUS_FULL;
           break;
         }
       }
+
       decompress_adx_frame(&adx[target_adx]);
       i += 64;
       adx[target_adx].current_frame += 1;
@@ -971,7 +998,6 @@ void play_adx(short pcm_control_index, short loop_type) {
 
   if (adx[target_adx].status & ADX_STATUS_PLAY) {
     ////////////////////////////////////////
-    //
     // The Whippet
     // Honestly, this is an imprecise piece of the equation.
     // This is needed because the SCSP consumes data at a rate faster than
@@ -997,9 +1023,10 @@ void play_adx(short pcm_control_index, short loop_type) {
       adx[target_adx].work_play_pt += snd->bytes_per_blank;
       adx[target_adx].whippet_frame = 0;
     }
+
     // sh2Com->drv_adx_coef_1 = adx[target_adx].whippet_frame;
     adx[target_adx].work_play_pt += snd->bytes_per_blank;
-    ///////////////////////////////////////
+
     // ADX Decompression Starting
     // If the play pointer has met or exceeded the recharge point,
     // this is the time we have have calculated as the appropriate time to begin
@@ -1009,7 +1036,7 @@ void play_adx(short pcm_control_index, short loop_type) {
     if (adx[target_adx].work_play_pt >= adx[target_adx].recharge_point && !(adx[target_adx].status & ADX_STATUS_FULL)) {
       adx[target_adx].status |= ADX_STATUS_DECOMP;
     }
-    ///////////////////////////////////////
+
     // ADX Decompression Ending
     // If we have decompressed enough data to fill up the decompression buffer,
     // cease decompression and re-set the decompression target tracker and
@@ -1019,7 +1046,7 @@ void play_adx(short pcm_control_index, short loop_type) {
       adx[target_adx].work_decomp_pt -= snd->decompression_size;
       adx[target_adx].dst = adx[target_adx].original_dst;
     }
-    ///////////////////////////////////////
+
     // ADX End Condition
     // When we have decompressed all the data from the ADX sound,
     // we have flagged the ADX status as FULL. The sound has been fully
@@ -1043,39 +1070,34 @@ void play_adx(short pcm_control_index, short loop_type) {
         adx[target_adx].status = ADX_STATUS_END;
       }
     }
-    ///////////////////////////////////////
+
     // ADX Play Tracking
-    // If the maximal position of the SCSP in the playback buffer will have met
-    // or exceeded the size of it, we **know** the SCSP is going to go back to
-    // the beginning of the buffer. We know this because the SCSP has been set
-    // to play back this region of sound as a loop. This also must be after we
-    // check the end condition for a sound, because if it is not, the sound will
-    // loop into old data.
+    // If the maximal position of the SCSP in the playback buffer will have met or exceeded the size of it, we **know**
+    // the SCSP is going to go back to the beginning of the buffer. We know this because the SCSP has been set to play
+    // back this region of sound as a loop. This also must be after we check the end condition for a sound, because if
+    // it is not, the sound will loop into old data.
     if (adx[target_adx].work_play_pt >= adx[target_adx].decomp_space) {
       adx[target_adx].work_play_pt -= snd->decompression_size;
     }
-    ////////////////////////////////////////
+
     // ADX Parameter / Volume Update
-    // Do this here for playing sounds.
-    // We should not need to update the ADX Dummy with this information here,
-    // since the next time it is used, it will update.
+    // Do this here for playing sounds. We should not need to update the ADX Dummy with this information here, since the
+    // next time it is used, it will update.
     csr[snd->icsr_target].pan_send = ((snd->volume << 13) | (snd->pan << 8));
   }
 
-  ///////////////////////////////////////
   // ADX Stop Condition
-  // This is controlled by conditions above, and exactly what gets us here
-  // changes. Control data from the ADX dummy, ADX PCM control, and ADX control
-  // struct is cleared. In all cases, it is acceptable to indicate that the SH2
-  // no longer permits the sound as looping conditions happen earlier. However,
-  // it's not always needed. This is the control area which stops sounds which
-  // must be prematurely stopped (in case of being commanded to stop).
+  // This is controlled by conditions above, and exactly what gets us here changes. Control data from the ADX dummy, ADX
+  // PCM control, and ADX control struct is cleared. In all cases, it is acceptable to indicate that the SH2 no longer
+  // permits the sound as looping conditions happen earlier. However, it's not always needed. This is the control area
+  // which stops sounds which must be prematurely stopped (in case of being commanded to stop).
   if (adx[target_adx].status & ADX_STATUS_END || loop_type == ADX_STATUS_NONE ||
     ((loop_type != PCM_SEMI) && snd->sh2_permit == 0)) {
     snd->sh2_permit = 0;
     for (short s = adx[target_adx].buf_string[0]; s <= adx[target_adx].buf_string[1]; s++) {
       adx_buffer_used[s] = 0;
     }
+
     // When an ADX stream ends, the appropriate logic is to flag both buffers as
     // having been passed. This is just to cover logical flaws in the linked
     // library.
@@ -1083,6 +1105,7 @@ void play_adx(short pcm_control_index, short loop_type) {
       sh2Com->adx_buffer_pass[0] = 1;
       sh2Com->adx_buffer_pass[1] = 1;
     }
+
     adx[target_adx].status = ADX_STATUS_NONE;
     adx[target_adx].pcm_number = -1;
     adx[target_adx].passed_buffers = 0;
@@ -1099,11 +1122,9 @@ void pcm_control_loop(void) {
   short adxIndex = 0;
   short volatileIndex = 0;
 
-  // A new control loop for multiple ADX sounds is required.
+  // TODO: A new control loop for multiple ADX sounds is required.
 
-  //////////////////////////////////////////////////
   // Build List of each type of basic control method
-  //////////////////////////////////////////////////
   for (short k = 0; k < PCM_CTRL_MAX; k++) {
     lctrl = &pcmCtrlData[k];
     if (lctrl->loopType == PCM_VOLATILE && lctrl->bitDepth != PCM_TYPE_ADX) {
@@ -1121,42 +1142,37 @@ void pcm_control_loop(void) {
   // Control loop for looping or protected sounds
   for (short l = 0; l < loopingIndex; l++) {
     lctrl = &pcmCtrlData[loopingPCMs[l]];
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //  PCM LOOP CONTROL SEGMENT
-    //  PCM loop start and end conditions are based on SH2.
-    //  Write 1 to start the loop and 0 to end it.
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //  PCM loop start and end conditions are based on SH2. Write 1 to start the loop and 0 to end it.
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     if (lctrl->loopType > 0) {
-      if (lctrl->sh2_permit == 1) // If the loop is allowed by SH2, either start
-                                  // it, or update its parameters.
-      {
-        if (lctrl->icsr_target == -1) // The loop is not associated with an ICSR
-                                      // which _should_ mean it is not playing.
-        {
-          if (!find_free_slot(lctrl))
+      // If the loop is allowed by SH2, either start it, or update its parameters.
+      if (lctrl->sh2_permit == 1) {
+        // The loop is not associated with an ICSR which _should_ mean it is not playing.
+        if (lctrl->icsr_target == -1) {
+          if (!find_free_slot(lctrl)) {
             break;
+          }
           set_looping_sound(loopingPCMs[l]);
         } else {
           // Update the sound
           set_looping_sound(loopingPCMs[l]);
         }
-      } else if (lctrl->icsr_target != -1) // If the loop is not allowed by the SH2, and it is associated with
-                                           // an ICSR, it is active. Turn it off.
-      {
+      } else if (lctrl->icsr_target != -1) {
+        // If the loop is not allowed by the SH2, and it is associated with an ICSR, it is active. Turn it off.
         driver_end_sound(&lctrl->icsr_target, lctrl);
       }
-      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      //    PROTECTED SOUND CONTROL SEGMENT
-      //    Protected sounds are expected to manage permission end by
-      //    themselves. In this case, the SH2 is never to write 0 to SH2 Permit
-      //    to stop a
-      // protected sound.    To prematurely stop a protected sound, set its
-      // volume to zero and let the timer conclude.
-      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    } else if (lctrl->loopType == PCM_PROTECTED && lctrl->sh2_permit == 1) // If normal protected sound, if permitted...
-    {
-      if (lctrl->icsr_target == -1) // If first run (no current ICSR)
-      {
+    } else if (lctrl->loopType == PCM_PROTECTED && lctrl->sh2_permit == 1) {
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // PROTECTED SOUND CONTROL SEGMENT
+      // Protected sounds are expected to manage permission end by themselves. In this case, the SH2 is never to write
+      // 0 to SH2 Permit to stop a protected sound. To prematurely stop a protected sound, set its volume to zero and
+      // let the timer conclude.
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+      // If first run (no current ICSR)
+      if (lctrl->icsr_target == -1) {
         // Attempt to grab a free ICSR. If there is none, function will return
         // -1, and thus we will stop.
         if (!find_free_slot(lctrl))
@@ -1166,47 +1182,40 @@ void pcm_control_loop(void) {
         // Update the sound
         play_protected_sound(loopingPCMs[l]);
       }
-      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-      //    SEMI-PROTECTED SOUND CONTROL SEGMENT
-      //    Semi-protected sounds manage the SH2 permit parameter but will still
-      // run the timer to the release of the ICSR if they are not permitted.
-      //    Permission 0 only disallows updates once the sound has started.
-      //    Because of this, writing SH2 Permit to 0 on a semi-protected sound
-      // results in undefined behaviour.     To stop a semi-protected sound,
-      // change the volume to 0 and let the timer conclude.
-      ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    } else if (lctrl->loopType == PCM_SEMI) // If semi-protected sound...
-    {
-      if (lctrl->icsr_target == -1 && lctrl->sh2_permit == 1) // Sound does not currently occupy an ICSR
-      {
-        // Attempt to grab a free ICSR. If there is none, function will return
-        // -1, and thus we will stop.
+    } else if (lctrl->loopType == PCM_SEMI) {
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      // SEMI-PROTECTED SOUND CONTROL SEGMENT
+      // Semi-protected sounds manage the SH2 permit parameter but will still run the timer to the release of the ICSR
+      // if they are not permitted. Permission 0 only disallows updates once the sound has started. Because of this,
+      // writing SH2 Permit to 0 on a semi-protected sound results in undefined behaviour. To stop a semi-protected
+      // sound, change the volume to 0 and let the timer conclude.
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      
+      // Sound does not currently occupy an ICSR
+      if (lctrl->icsr_target == -1 && lctrl->sh2_permit == 1) {
+        // Attempt to grab a free ICSR. If there is none, function will return -1, and thus we will stop.
         if (!find_free_slot(lctrl))
           break;
         play_semi_protected_sound(loopingPCMs[l]);
-      } else if (lctrl->icsr_target != -1) { // Sound has an ICSR
-        // Update the sound
+      } else if (lctrl->icsr_target != -1) {
+        // Sound has an ICSR, update the sound
         play_semi_protected_sound(loopingPCMs[l]);
       }
     }
-    //////////////////////////////
-    // PCM Control Loop End Stub
-  }
+  } // PCM Control Loop End
 
-  //////////////////////////////////////////
   // ADX Control Loop
   for (short a = 0; a < adxIndex; a++) {
     lctrl = &pcmCtrlData[adxPCMs[a]];
     play_adx(adxPCMs[a], lctrl->loopType);
   }
 
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  //    VOLATILE SOUND CONTROL SEGMENT
-  //    Volatile sounds are essentially uncontrolled. They immediately write the
-  // SH2 no longer permits the sound after the first blank of playback.  But
-  // they will still play to their conclusion, provided no other sound decides
-  // to occupy their ICSR.
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // VOLATILE SOUND CONTROL SEGMENT
+  // Volatile sounds are essentially uncontrolled. They immediately write the SH2 no longer permits the sound after the
+  // first blank of playback. But they will still play to their conclusion, provided no other sound decides to occupy
+  // their ICSR.
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   for (short v = 0; v < volatileIndex; v++) {
     lctrl = &pcmCtrlData[volatilePCMs[v]];
     if (lctrl->sh2_permit == 1) {
@@ -1223,14 +1232,14 @@ void _start(void) {
   static short new_volume = 0;
   static short old_volume = 0;
   driver_data_init();
+
   while (1) {
-    //
-    do {
-      // sh2Com->adx_stream_comm = ('W' | ('A'<<8));
-      if (sh2Com->start == 1)
-        break;
-    } while (1);
+    while (sh2Com->start != 1) {
+      __asm__ volatile("nop");
+    }
+
     sh2Com->start = 0;
+
     // Region will run the program once for every time the SH2 commands the
     // driver to start.
     pcm_control_loop();
@@ -1253,6 +1262,7 @@ void _start(void) {
       csr[17].attenuation = 0xFF;
       csr[17].pan_send = sh2Com->cdda_right_channel_vol_pan;
     }
+
     old_volume = new_volume;
   }
 }
