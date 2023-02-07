@@ -697,7 +697,7 @@ void play_adx(short pcm_control_index, short loop_type) {
     if (adx[f].pcm_number == -1 && adx[f].status == ADX_STATUS_NONE && snd->icsr_target == -1 && snd->sh2_permit == 1) {
       // Try to find a free slot to play the sound in.
       // If none is found, exit this function.
-      if (!find_free_slot(snd))
+      if (find_free_slot(snd) < 0)
         return;
       target_adx = f;
       adx[f].pcm_number = pcm_control_index;
@@ -1151,7 +1151,7 @@ void pcm_control_loop(void) {
       if (lctrl->sh2_permit == 1) {
         // The loop is not associated with an ICSR which _should_ mean it is not playing.
         if (lctrl->icsr_target == -1) {
-          if (!find_free_slot(lctrl)) {
+          if (find_free_slot(lctrl) < 0) {
             break;
           }
           set_looping_sound(loopingPCMs[l]);
@@ -1175,7 +1175,7 @@ void pcm_control_loop(void) {
       if (lctrl->icsr_target == -1) {
         // Attempt to grab a free ICSR. If there is none, function will return
         // -1, and thus we will stop.
-        if (!find_free_slot(lctrl))
+        if (find_free_slot(lctrl) < 0)
           break;
         play_protected_sound(loopingPCMs[l]);
       } else {
@@ -1194,7 +1194,7 @@ void pcm_control_loop(void) {
       // Sound does not currently occupy an ICSR
       if (lctrl->icsr_target == -1 && lctrl->sh2_permit == 1) {
         // Attempt to grab a free ICSR. If there is none, function will return -1, and thus we will stop.
-        if (!find_free_slot(lctrl))
+        if (find_free_slot(lctrl) < 0)
           break;
         play_semi_protected_sound(loopingPCMs[l]);
       } else if (lctrl->icsr_target != -1) {
@@ -1221,7 +1221,7 @@ void pcm_control_loop(void) {
     if (lctrl->sh2_permit == 1) {
       // Attempt to grab a free ICSR. If there is none, function will return -1,
       // and thus we will stop.
-      if (!find_free_slot(lctrl))
+      if (find_free_slot(lctrl) < 0)
         break;
       play_volatile_sound(lctrl);
     }
