@@ -2,9 +2,11 @@
 //this file is compiled separately
 //hopefully somewhat portable
 //
-#include <jo/jo.h> //Mostly to link us with SBL file system
+#include <sl_def.h> //Mostly to link us with SBL file system
 #include "pcmsys.h"
-
+#include <SEGA_GFS.H>
+#define true	(1)
+#define false	(0)
 
 static const int logtbl[] = {
 /* 0 */		0, 
@@ -227,7 +229,7 @@ void			load_drv(int master_adx_frequency)
 	numberPCMs = 0;
 }
 
-short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL)
+short			calculate_bytes_per_blank(int sampleRate, Bool is8Bit, Bool isPAL)
 {
 	int frameCount = (isPAL == true) ? 50 : 60;
 	int sampleSize = (is8Bit == true) ? 8 : 16;
@@ -382,7 +384,7 @@ short		load_adx(Sint8 * filename)
 	short bpb = calculate_bytes_per_blank((int)adx.sample_rate, false, PCM_SYS_REGION); //Iniitalize as max volume
 	if(bpb != 768 && bpb != 512 && bpb != 384 && bpb != 256 && bpb != 192 && bpb != 128)
 	{
-		jo_printf(0, 1, "!(ADX INVALID BYTE-RATE)!");
+		slPrint("!(ADX INVALID BYTE-RATE)!", slLocate(0, 1));
 		return -2;
 	}
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = bpb;
@@ -442,7 +444,7 @@ void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_chann
 	m68k_com->cdda_right_channel_vol_pan = right_channel;
 }
 
-void CDDA_Play(int fromTrack, int toTrack, bool loop)
+void CDDA_Play(int fromTrack, int toTrack, Bool loop)
 {
     CdcPly ply;
     CDC_PLY_STYPE(&ply) = CDC_PTYPE_TNO; // track number
@@ -464,7 +466,7 @@ void CDDA_Play(int fromTrack, int toTrack, bool loop)
     CDC_CdPlay(&ply);
 }
 
-void CDDA_PlaySingle(int track, bool loop)
+void CDDA_PlaySingle(int track, Bool loop)
 {
     CDDA_Play(track, track, loop);
 }

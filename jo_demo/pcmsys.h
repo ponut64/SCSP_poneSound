@@ -147,7 +147,7 @@ typedef struct {
 	unsigned int sample_ct;
 	unsigned short hp_cutoff; //[this should be 500]
 	unsigned char loop;
-	unsigned char illegal; //[boolean, 0 for false, 1 for true]
+	unsigned char illegal; //[Boolean, 0 for false, 1 for true]
 } adx_header;
 
 //
@@ -162,7 +162,7 @@ extern short numberPCMs;
 // System functions shared for pcmstm.c/h
 //
 short			convert_bitrate_to_pitchword(short sampleRate);
-short			calculate_bytes_per_blank(int sampleRate, bool is8Bit, bool isPAL);
+short			calculate_bytes_per_blank(int sampleRate, Bool is8Bit, Bool isPAL);
 short 			lcm(short a, short b);
 void			cd_init(void);
 
@@ -205,8 +205,8 @@ void	sdrv_vblank_rq(void);
 
 void CDDA_SetVolume(int vol);
 void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel);
-void CDDA_Play(int fromTrack, int toTrack, bool loop);
-void CDDA_PlaySingle(int track, bool loop);
+void CDDA_Play(int fromTrack, int toTrack, Bool loop);
+void CDDA_PlaySingle(int track, Bool loop);
 void CDDA_Stop(void);
 
 
