@@ -317,7 +317,7 @@ void driver_data_init(void) {
   sh2Com->pcmCtrl = (_PCM_CTRL *) ((unsigned int) &pcmCtrlData[0] + 0x25A00000);
 
   // Set "start" to a specific number during start up to communicate the driver
-  // is initailizing.
+  // is initializing.
   sh2Com->start = 0xFFFF;
   for (char i = 0; i < 32; i++) {
     ICSR_Busy[i] = -1;
