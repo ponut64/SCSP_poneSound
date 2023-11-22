@@ -46,7 +46,7 @@ void	file_request_manager(void)
 	}
 }
 
-void	new_file_request(Sint8 * filename, void * destination, void (*handler_function)(void *))
+void	new_file_request(Sint8 * filename, void * destination, void (*handler_function)(void *), short immediate_or_async)
 {
 	if(number_of_requests >= MAX_FILE_REQUESTS) return;
 	file_request_list[number_of_requests].id = GFS_NameToId(filename);
@@ -54,7 +54,67 @@ void	new_file_request(Sint8 * filename, void * destination, void (*handler_funct
 	file_request_list[number_of_requests].handler_function = handler_function;
 	file_request_list[number_of_requests].active = 1;
 	file_request_list[number_of_requests].done = 0;
+	file_request_list[number_of_requests].immediate_or_async = immediate_or_async;
 	number_of_requests++;
+}
+
+void	new_special_request(Sint8 * filename, void * destination, void (*handler_function)(Sint32, void *))
+{
+	if(number_of_requests >= MAX_FILE_REQUESTS) return;
+	file_request_list[number_of_requests].id = GFS_NameToId(filename);
+	file_request_list[number_of_requests].destination = destination;
+	file_request_list[number_of_requests].special_handler_function = handler_function;
+	file_request_list[number_of_requests].active = 1;
+	file_request_list[number_of_requests].done = 0;
+	file_request_list[number_of_requests].immediate_or_async = HANDLE_SPECIAL;
+	number_of_requests++;
+}
+
+
+void	load_file_list_immediate(void)
+{
+	//To mute any... strangeness.
+	*master_volume = 0x200;
+
+	GfsHn gfs_ea;
+	Sint32 file_size;
+	
+	for(int i = number_of_requests; i > -1; i--)
+	{
+		if(file_request_list[i].active && !file_request_list[i].done)
+		{
+			if(file_request_list[i].immediate_or_async != HANDLE_SPECIAL)
+			{
+			//Open GFS
+			gfs_ea = GFS_Open(file_request_list[i].id);
+			//Get size
+			GFS_GetFileInfo(gfs_ea, NULL, NULL, &file_size, NULL);
+			//Close it again
+			GFS_Close(gfs_ea);
+			
+			GFS_Load(file_request_list[i].id, 0, (Uint32 *)file_request_list[i].destination, file_size);
+			
+			file_request_list[i].handler_function(file_request_list[i].destination);
+			} else {
+			//Special type handling	
+			file_request_list[i].special_handler_function(file_request_list[i].id, file_request_list[i].destination);
+			}
+			
+			// if(file_request_list[i].immediate_or_async == HANDLE_SPECIAL)
+			// {
+				
+				// file_request_list[i].special_handler_function(file_request_list[i].id, file_request_list[i].destination);
+
+			// }
+			
+			file_request_list[i].active = 0;
+			file_request_list[i].done = 1;
+			number_of_requests--;
+			
+		}
+	}
+
+	set_master_volume(driver_master_volume);
 }
 
 void	finish_file_request(void)
@@ -76,10 +136,26 @@ Note, unless the game code is operating within the "pcm_stream_host" function, t
 */
 void	start_pcm_stream(Sint8 * filename, int volume)
 {
-		if(buf.operating || buf.setup_requested) return;
+
 	buf.file_id = GFS_NameToId(filename);
 	buf.setup_requested = true;
 	stm.volume = volume;
+	//If a stream is already playing, re-start it with the new file-name.
+	if(buf.operating || buf.setup_requested)
+	{
+		stm.stopping = true;
+		stm.restarting = true;
+	}
+}
+
+//Note: You really can't change the pitch of these; messes with it too much.
+void	change_pcm_stream_param(char volume, char pan)
+{
+		pcm_parameter_change(stm.pcm_num, volume, pan);
+}
+void	change_adx_stream_param(char volume, char pan)
+{
+		pcm_parameter_change(adx_stream.pcm_number, volume, pan);
 }
 
 // Will stop a PCM stream.
@@ -256,7 +332,7 @@ void	start_adx_stream(Sint8 * filename, short volume)
 	//That's a problem if it's old data, from the wrong ADX stream.
 	//So we have to purge it. We shouldn't have to; the data is copied here before the stream is commanded to play... but we do.
 	unsigned short * writedummy = (unsigned short *)adx_stream.back_buffer[0];
-	for(int i = 0; i < m68k_com->pcmCtrl[adx_stream.pcm_number].bytes_per_blank; i++)
+	for(int i = 0; i < (m68k_com->pcmCtrl[adx_stream.pcm_number].bytes_per_blank<<2); i++)
 	{
 		*writedummy++ = 0;
 	}
@@ -392,6 +468,8 @@ void		pcm_stream_host(void(*game_code)(void))
 	static Sint32 gfs_svr_status;
 	static Sint32 bytes_read_now;
 	static Sint32 byte_dummy;
+	
+	RESTART:
 
 	cd_init();
 
@@ -562,18 +640,29 @@ void		pcm_stream_host(void(*game_code)(void))
 			//The parameters are set and other important parameters are re-set here, too.
 				
 			//////////////////
-				file_system_status_reporting = REPORT_SETTING_UP_FILE;
-				//game_code();
-				file.handle = GFS_Open(file.id);
-				GFS_SetReadPara(file.handle, (64 * 1024));
-				GFS_SetTransPara(file.handle, file_transfer_sector);
-				GFS_SetTmode(file.handle, GFS_TMODE_SDMA0);
-				GFS_GetFileSize(file.handle, NULL, &file.total_sectors, NULL);
-				GFS_GetFileInfo(file.handle, NULL, NULL, &file.total_bytes, NULL);
-				file.sectors_read_so_far = 0;
-				file.setup_requested = false;
-				file.requested = true;
-				file.transfer_lock = true;
+				if(active_request->immediate_or_async != 0)
+				{
+					//Very tough thing.
+					stm.stopping = true;
+					stm.restarting = true;
+					pcm_cease(stm.pcm_num);
+					file.setup_requested = false;
+					load_file_list_immediate();
+					goto RESTART; //Ugly fix
+				} else {
+					file_system_status_reporting = REPORT_SETTING_UP_FILE;
+					//game_code();
+					file.handle = GFS_Open(file.id);
+					GFS_SetReadPara(file.handle, (64 * 1024));
+					GFS_SetTransPara(file.handle, file_transfer_sector);
+					GFS_SetTmode(file.handle, GFS_TMODE_SDMA0);
+					GFS_GetFileSize(file.handle, NULL, &file.total_sectors, NULL);
+					GFS_GetFileInfo(file.handle, NULL, NULL, &file.total_bytes, NULL);
+					file.sectors_read_so_far = 0;
+					file.setup_requested = false;
+					file.requested = true;
+					file.transfer_lock = true;
+				}
 			//////////////////
 				//slSynch();
 			} else if(adx_stream.file.requested /*&& !adx_stream.back_buffer_filled[0] && !adx_stream.back_buffer_filled[1] */

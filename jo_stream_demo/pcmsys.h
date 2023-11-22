@@ -156,6 +156,7 @@ typedef struct {
 extern	sysComPara * m68k_com;
 extern	unsigned int * scsp_load;
 extern unsigned short * master_volume;
+extern unsigned short driver_master_volume;
 extern short numberPCMs;
 
 //
@@ -180,6 +181,7 @@ short	load_8bit_pcm(Sint8 * filename, int sampleRate);
 short	load_adx(Sint8 * filename);
 void	load_drv(int master_adx_frequency);
 
+void	set_master_volume(unsigned short volume);
 void	pcm_play(short pcmNumber, char ctrlType, char volume);
 void	pcm_parameter_change(short pcmNumber, char volume, char pan);
 void	pcm_cease(short pcmNumber);

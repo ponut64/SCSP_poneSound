@@ -55,6 +55,7 @@ static const int logtbl[] = {
 	static unsigned int * scsp_loading_start = (unsigned int*)(0x408 + DRV_SYS_END + 0x20); //Local loading address for sound data, is DRV_SYS_END ahead of the SNDPRG, and ahead of the communication data
 	unsigned int * scsp_load;
 	unsigned short * master_volume = (unsigned short *)(SNDRAM + 0x100400);
+	unsigned short driver_master_volume = 0;
 	short numberPCMs = 0;
 	
 static short adx_coef_tbl[8][2] = 
@@ -68,6 +69,15 @@ static short adx_coef_tbl[8][2] =
 	{ADX_1280_COEF_1, ADX_1280_COEF_2},
 	{ADX_1920_COEF_1, ADX_1920_COEF_2}
 };
+
+//MVOL is a 4-bit number; values 0-15 are valid.
+//If the value is higher than 15, this will just cap it at 15.
+void	set_master_volume(unsigned short volume)
+{
+	volume = (volume >= 0xF) ? 0xF : volume;
+	*master_volume = 0x200 | (volume & 0xF);
+	driver_master_volume = volume;
+}
 	
 void	pcm_play(short pcmNumber, char ctrlType, char volume)
 {
@@ -188,7 +198,7 @@ void	load_driver_binary(Sint8 * filename, void * buffer, int master_adx_frequenc
 	smpc_issue_command(SMPC_CMD_SNDOFF);
 	smpc_wait_till_ready();
 	//Set max master volume + 4mbit memory 
-	*master_volume = 0x20F; 
+	set_master_volume(0xF);
 	//Copy the driver binary (code) over to sound RAM. The binary includes the vector table information.
 	slDMACopy(buffer, (void*)SNDRAM, file_size);
 	slDMAWait();
