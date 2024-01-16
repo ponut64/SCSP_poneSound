@@ -61,7 +61,12 @@ void			jo_main(void)
 	jo_core_init(JO_COLOR_Black);
 
 	load_drv(ADX_MASTER_2304);
-	
+	////////////////////////////////////////////////
+	// REMINDER: All file names must comply with the 8.3 standard.
+	// File extensions can be no longer than 3 letters.
+	// File names can be no longer than 8 letters.
+	// The total length is thusly 12 characters (as there is a period).
+	////////////////////////////////////////////////
 	/*
 	To convert a sound to 16-bit
 	ffmpeg -i %this%.wav -f s16be -ac 1 -ar (bitrate) %this%.PCM
