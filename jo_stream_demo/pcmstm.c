@@ -547,6 +547,7 @@ void		pcm_stream_host(void(*game_code)(void))
 				pcm_cease(stm.pcm_num);
 			}
 			GFS_Close(buf.file_handle);
+			goto RESTART; //(Possible) ugly crash fix?
 				//slSynch();
 		} else if(!buf.needs_buffer_filled)
 		{

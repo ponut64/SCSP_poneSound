@@ -205,11 +205,63 @@ void	sdrv_vblank_rq(void);
 // Credit: ndiddy, ReyeMe, CyberWarriorX [Iapetus]
 //
 
-void CDDA_SetVolume(int vol);
-void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel);
-void CDDA_Play(int fromTrack, int toTrack, Bool loop);
-void CDDA_PlaySingle(int track, Bool loop);
-void CDDA_Stop(void);
+// -------------------------------------
+// Types
+// -------------------------------------
+
+/** @brief Track location data
+ */
+typedef struct
+{
+    unsigned int Control:4;
+    unsigned int Number:4;
+    unsigned int fad:24;
+} CDTrackLocation;
+
+/** @brief Track information data
+ */
+typedef struct
+{
+    unsigned char Control:4;
+    unsigned char Address:4;
+    unsigned char Number;
+	union {
+		short point;
+		struct {
+			char psec;
+			char pframe;
+		} pData;
+		
+	}pBody;
+	
+} CDTrackInformation;
+
+/** @brief Session data
+ */
+typedef struct
+{
+    unsigned int Control:4;
+    unsigned int Address:4;
+    unsigned int fad:24;
+} CDSession;
+
+/** @brief Table of contents
+ */
+#define MAX_CD_TRACK_COUNT (24)
+typedef struct
+{
+    CDTrackLocation Tracks[MAX_CD_TRACK_COUNT];
+    CDTrackInformation FirstTrack;
+    CDTrackInformation LastTrack;
+    CDSession Session;
+} CDTableOfContents;
+
+
+void	CDDA_SetVolume(int vol);
+void	CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel);
+void	CDDA_Play(int fromTrack, int toTrack, Bool loop, int startAddress);
+void	CDDA_PlaySingle(int track, Bool loop);
+int		CDDA_Stop(void);
 
 
 #endif
