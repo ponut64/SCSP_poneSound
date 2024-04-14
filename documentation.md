@@ -5,6 +5,123 @@
 
 What follows is a basic documentation of what/how Ponésound is.
 
+////////////////////////////////////////////////////////////////////////
+// *********************PLEASE READ THIS PART***************************
+// IMPORTANT NOTES ABOUT PCM CHANNEL CONTROL
+////////////////////////////////////////////////////////////////////////
+
+Within the driver, there are four basic control types for PCM sound effects:
+Volatile, Protected, Semi-protected, and looping.
+Let us go through these types so that I may describe what their names mean and how they should be used.
+
+1. Volatile, defined as:
+#define PCM_VOLATILE	(0)
+This should !!!NEVER!!! be used unless you KNOW WHAT YOU ARE DOING.
+Volatile sounds have **NO CHANNEL MANAGEMENT!**. For this reason, ADX sounds cannot be played as volatile.
+A volatile sound will find the first unprotected channel and select it for playback of the sound.
+It will not protect the channel nor will the driver remember that channel as being used for anything.
+This play type remains in the driver in case the user wishes to do manual channel management.
+I remind you: THIS SHOULD NEVER BE USED unless you want the driver to do nothing with a sound except play it.
+
+2. Protected, defined as:
+#define PCM_PROTECTED	(-1)
+With this type, the first free channel will be found and playback for this sound will start.
+This is a channel control type which will protect the channel the sound is playing back in.
+It will also protect the channel from play commands from the SH2.
+That means a sound played back as `PCM_PROTECTED` will not stop or restart unless finished or commanded to stop.
+
+3. Semi-protected, defined as:
+#define PCM_SEMI		(-2)
+With this type, the first free channel will be found and playback for this sound will start.
+This channel control type also protects the channel that the sound is playing back in.
+However, it will not protect the slot from play commands from SH2, such that another play command will immediately restart it.
+That means a sound played back as `PCM_SEMI` will start or restart when commanded to play, and stop when commanded to.
+
+4. Looping, defined with various types:
+#define	PCM_ALT_LOOP	(3)
+
+#define PCM_RVS_LOOP	(2)
+
+#define PCM_FWD_LOOP	(1)
+
+All of these types are technically variants of `PCM_PROTECTED`, except they command the SCSP to perform one of three types of loop.
+With `PCM_RVS_LOOP`, the sound will loop backwards. With `PCM_FWD_LOOP`, the sound will loop forwards.
+With `PCM_ALT_LOOP`, the sound will alternate between looping backwards and forwards.
+These are just hardware features that I decided to support; I've no idea why you'd want anything but `PCM_FWD_LOOP`.
+Only `PCM_FWD_LOOP` applies to ADX sounds (and it's a sketchy implementation at that).
+
+5. ADX Streams, defined as:
+#define ADX_STREAM		(-3)
+Ignore this one. The linked library `pcmstm.c/h` uses it to communicate to the driver that an ADX sound will use a ring buffer.
+It does not have any other purpose.
+
+////////////////////////////////////////////////////////////////////////
+// Notes about the ADX implementation
+
+The ADX playback is *very strictly* limited to the following rates:
+7680	Hz (NTSC) | 6400	Hz (PAL)		for up to 3 channels
+11520	Hz (NTSC) | 9600	Hz (PAL)		for up to 2 channels
+15360	Hz (NTSC) | 12800	Hz (PAL)		for 1 channel
+23040	Hz (NTSC) | 19200	Hz (PAL)		*(only in cases of low sound system activity)
+
+You can find more detail about bitrates in comments inside the driver source code itself.
+The ADX decompression is implemented on the driver-side, aka, the M68k is performing the decompression.
+
+It is doing so poorly; with shortcuts and tables abound. These compromise quality. 
+I'll just put in that brief statement so you know that ADX doesn't normally sound this bad.
+
+Another note is that the driver requires an ADX Master frequency to start.
+You supply this when you load the driver.
+They are defined as:
+#define ADX_MASTER_768 (0)
+#define ADX_MASTER_1152 (1)
+#define ADX_MASTER_1536 (2)
+#define ADX_MASTER_2304 (3)
+For PAL, it is defined as:
+#define ADX_PAL_640 (4)
+#define ADX_PAL_960 (5)
+#define ADX_PAL_1280 (6)
+#define ADX_PAL_1920 (7)
+
+The reason a master frequency is required is because the driver builds decompression tables based on this frequency.
+You can play back sounds that don't match the master frequency, but they will not sound right.
+
+///////////////////////////////////////////////////////////////
+// Wait a minute, why are the PAL rates lower, or different at all?
+
+This is a software-timed driver that is timed on vblank.
+All of the channel timers are timed based on the bytes that each bitrate consumes per vblank.
+For NTSC, this is 1/60th of a second, or about 16.6ms. For PAL, this is 1/50th of a second, or about 20ms.
+You can see then that NTSC screens refresh *faster* and therefore more data is consumed per vblank.
+That means the bitrate can be higher.
+
+The reality is that the PAL system does have more time between vblanks to decompress the data for the next vblank,
+so hypothetically, the PAL driver should be able to operate more channels simultaneously.
+Unfortunately, I just don't care enough to tell you if it really can or not.
+None of the streaming systems are guaranteed to work in PAL either.
+
+///////////////////////////////////////////////////////////////
+// Wait a minute, I commanded a sound to play twice but it's still only on one channel. What gives?!
+
+The driver does not instance sound effects for you; you must do that on your own.
+It only manages the channels for the sounds as listed in `m68k_com->pcmCtrl`.
+In order to instance a sound effect, you must copy the contents of the `pcmCtrl` entry (what is returned from loading the sound)
+into `m68k_com->pcmCtrl[numberPCMs]` entry, then perform `numberPCMs++`.
+The driver should be able to handle out-of-order instancing (e.g. setting aside certain entries for instancing).
+
+// But why don't you do that for me? It seems like an obvious feature...
+
+The 68k's subsystem has the discrete potential to be heavily bottlenecked on memory bandwidth.
+The way the driver is currently designed to work, sound instancing would make the 68k responsible for more data management.
+Because of the performance concern, sound instancing should not be performed "on the fly";
+instances should be managed after they are loaded, but before they are played, for ideal performance.
+This is especially true in the case where ADX and/or sound streaming is being used.
+
+How much more frustrated would you be with me if loading a sound also required an instance number argument?
+And playing a sound required not only a sound number, but an instance number?
+
+Also, I didn't need it, so I didn't add it. :)
+
 ///////////////////////////////////////////////////////////////
 //
 //	DRIVER WORK-FLOW
