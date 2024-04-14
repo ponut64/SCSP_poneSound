@@ -522,7 +522,7 @@ void		pcm_stream_host(void(*game_code)(void))
 			
 			for(short b = 0; b < NUM_PCM_BUF; b++)
 			{
-				buf.segment_full[b] = true;
+				buf.segment_full[b] = false;
 			}
 			buf.vblank_counter = 0;
 			buf.operating =  true;
@@ -547,7 +547,7 @@ void		pcm_stream_host(void(*game_code)(void))
 				pcm_cease(stm.pcm_num);
 			}
 			GFS_Close(buf.file_handle);
-			goto RESTART; //(Possible) ugly crash fix?
+			//goto RESTART; //(Possible) ugly crash fix?
 				//slSynch();
 		} else if(!buf.needs_buffer_filled)
 		{
@@ -647,6 +647,14 @@ void		pcm_stream_host(void(*game_code)(void))
 					stm.stopping = true;
 					stm.restarting = true;
 					pcm_cease(stm.pcm_num);
+					stop_adx_stream();
+					adx_stream.file.requested = false;
+					adx_stream.file.transfer_lock = false;
+					adx_stream.file.setup_requested = false;
+					adx_stream.active = false;
+					adx_stream.playing = false;
+					adx_stream.request_stop = false;
+					//GFS_Close(adx_stream.file.handle);
 					file.setup_requested = false;
 					load_file_list_immediate();
 					goto RESTART; //Ugly fix
@@ -666,7 +674,7 @@ void		pcm_stream_host(void(*game_code)(void))
 				}
 			//////////////////
 				//slSynch();
-			} else if(adx_stream.file.requested /*&& !adx_stream.back_buffer_filled[0] && !adx_stream.back_buffer_filled[1] */
+			} else if(adx_stream.file.requested && !adx_stream.back_buffer_filled[0] && !adx_stream.back_buffer_filled[1]
 						&& adx_stream.file.sectors_read_so_far < adx_stream.file.total_sectors && !adx_stream.request_stop)
 			{
 			//Basically, we set-up the ADX file, and trigger it to read in new data when the back buffer is empty.
