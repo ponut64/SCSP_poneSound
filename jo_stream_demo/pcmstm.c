@@ -136,16 +136,15 @@ Note, unless the game code is operating within the "pcm_stream_host" function, t
 */
 void	start_pcm_stream(Sint8 * filename, int volume)
 {
-
-	buf.file_id = GFS_NameToId(filename);
-	buf.setup_requested = true;
-	stm.volume = volume;
 	//If a stream is already playing, re-start it with the new file-name.
 	if(buf.operating || buf.setup_requested)
 	{
 		stm.stopping = true;
 		stm.restarting = true;
 	}
+	buf.file_id = GFS_NameToId(filename);
+	buf.setup_requested = true;
+	stm.volume = volume;
 }
 
 //Note: You really can't change the pitch of these; messes with it too much.
