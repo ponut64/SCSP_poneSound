@@ -546,7 +546,19 @@ void		pcm_stream_host(void(*game_code)(void))
 				pcm_cease(stm.pcm_num);
 			}
 			GFS_Close(buf.file_handle);
-			//goto RESTART; //(Possible) ugly crash fix?
+			
+			
+			//stop_adx_stream();
+			//adx_stream.file.requested = false;
+			//adx_stream.file.transfer_lock = false;
+			//adx_stream.file.setup_requested = false;
+			//adx_stream.active = false;
+			//adx_stream.playing = false;
+			//adx_stream.request_stop = false;
+			//GFS_Close(adx_stream.file.handle);
+			game_code();
+			slSynch();
+		//	goto RESTART; //(Possible) ugly crash fix?
 				//slSynch();
 		} else if(!buf.needs_buffer_filled)
 		{
