@@ -93,12 +93,12 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_A))
 	{
-	start_adx_stream((Sint8*)"GORDON.ADX", 6);
+	start_adx_stream((Sint8*)"GORDON.ADX", 220);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_Z))
 	{
-	start_adx_stream((Sint8*)"ANIMES.ADX", 6);
+	start_adx_stream((Sint8*)"ANIMES.ADX", 220);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_B))
@@ -108,7 +108,7 @@ void			my_draw(void)
 
 	if(jo_is_input_key_pressed(0, JO_KEY_X))
 	{
-		start_pcm_stream((Sint8*)"MGEAR.PCM", 5);
+		start_pcm_stream((Sint8*)"MGEAR.PCM", 190);
 		stm.times_to_loop = 1;
 	}
 	
@@ -120,7 +120,7 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
-		pcm_play(snd_exert, PCM_SEMI, 7);
+		pcm_play(snd_exert, PCM_SEMI, 240);
 	}
 
 }

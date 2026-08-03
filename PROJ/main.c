@@ -3,6 +3,8 @@
 #define ADDR_STACK (0x80000 - 0x400)
 #define ADDR_END   (0x80000)
 
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Big credit to cWx :: cyberWarriorX for a sound driver prototype and most
 // importatly, the linker script!
@@ -69,6 +71,7 @@ void lead_function(void) // Link start to main
 #define PCM_CTRL_MAX (93)
 #define ADX_CTRL_MAX (3)
 #define DRV_SYS_END  (47 * 1024) // System defined safe end of driver's address space
+#define MPRO (0x100800) //SCSP-DSP Program RAM Address (MPRO \ Micro Program in SCSP Manual)
 
 #define PCM_ALT_LOOP                 (3)
 #define PCM_RVS_LOOP                 (2)
@@ -337,6 +340,13 @@ void driver_data_init(void) {
     csr[i].input_sel = 0;
     csr[i].pan_send = 0;
   }
+  
+//This is a fix for rogue data in slot 1 due to a failure to account for the BIOS' initialization of the SCSP-DSP.
+//MPRO is actually only 512 entries long, but there's another 128 bytes of buffer after it anyway. The original code was going to overwrite 1024 entires.
+// clear DSP RAM:
+  for (unsigned short i = 0; i < 0x300; i += 2) {
+	*(volatile unsigned short *) (MPRO + i) = 0x0000;
+  }
 
   // CD-DA Initialization
   // Slot 16 and 17 are **hard-wired** as the slots which play redbook audio.
@@ -547,8 +557,9 @@ void driver_start_slot_with_sound(volatile char cst, _PCM_CTRL *lctrl) {
   // randomize the pitch slightly. The octave is in this
   // word, so that's what you would change for randomized
   // pitch. +1 or -1.
-  csr[cst].oct_fns = lctrl->pitchword;
-  csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8));
+	csr[cst].oct_fns = lctrl->pitchword;
+	csr[cst].pan_send = ((7 << 13) | (lctrl->pan << 8));
+	csr[cst].attenuation = (255 - lctrl->volume);
 
   // We could skip writing these and specify direct data playback, but as far as I understand, this removes sound
   // panning. Attenuation, bit 9 [SD].
@@ -592,8 +603,9 @@ void play_protected_sound(short index) {
 
   } else {
     // Allow live volume and pitch adjustment of semi protected soundssounds
-    csr[cst].oct_fns = lctrl->pitchword;
-    csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8)); //
+	csr[cst].oct_fns = lctrl->pitchword;
+	csr[cst].pan_send = ((7 << 13) | (lctrl->pan << 8));
+	csr[cst].attenuation = (255 - lctrl->volume);
   }
 
   if (dataTimers[cst] >= (lctrl->playsize << (1 - lctrl->bitDepth))) // 1 - bitDepth is an expression that will or will
@@ -624,7 +636,8 @@ void play_semi_protected_sound(short index) {
   } else {
     // Allow live volume and pitch adjustment of semi protected soundssounds
     csr[cst].oct_fns = lctrl->pitchword;
-    csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8)); //
+	csr[cst].pan_send = ((7 << 13) | (lctrl->pan << 8));
+	csr[cst].attenuation = (255 - lctrl->volume);
   }
 
   if (dataTimers[cst] >= (lctrl->playsize << (1 - lctrl->bitDepth))) // 1 - bitDepth is an expression that will or will
@@ -667,8 +680,9 @@ void set_looping_sound(short index) {
   // randomize the pitch slightly. The octave is in this
   // word, so that's what you would change for randomized
   // pitch. +1 or -1.
-  csr[cst].oct_fns = lctrl->pitchword; 
-  csr[cst].pan_send = ((lctrl->volume << 13) | (lctrl->pan << 8));
+	csr[cst].oct_fns = lctrl->pitchword; 
+	csr[cst].pan_send = ((7 << 13) | (lctrl->pan << 8));
+	csr[cst].attenuation = (255 - lctrl->volume);
 
   // We could skip writing these and specify direct data playback,
   csr[cst].decay_1_2_attack = 31;
@@ -1083,7 +1097,8 @@ void play_adx(short pcm_control_index, short loop_type) {
     // ADX Parameter / Volume Update
     // Do this here for playing sounds. We should not need to update the ADX Dummy with this information here, since the
     // next time it is used, it will update.
-    csr[snd->icsr_target].pan_send = ((snd->volume << 13) | (snd->pan << 8));
+	csr[snd->icsr_target].pan_send = ((7 << 13) | (snd->pan << 8));
+	csr[snd->icsr_target].attenuation = (255 - snd->volume);
   }
 
   // ADX Stop Condition

@@ -293,7 +293,7 @@ short			load_16bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, false, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_16BIT; //Select 16-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Initialize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 0; //Initialize as max volume
 
 
 	numberPCMs++; //Increment pcm #
@@ -335,7 +335,7 @@ short			load_8bit_pcm(Sint8 * filename, int sampleRate)
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, true, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_8BIT; //Select 8-bit
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 0; //Iniitalize as max volume
 
 
 	numberPCMs++; //Increment pcm #
@@ -402,7 +402,7 @@ short		load_adx(Sint8 * filename)
 	m68k_com->pcmCtrl[numberPCMs].decompression_size = (big_dct_sz > (adx.sample_ct<<1)) ? adx.sample_ct<<1 : big_dct_sz;
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_ADX; //Select ADX type
 	m68k_com->pcmCtrl[numberPCMs].loopType = PCM_SEMI; //Initialize as semi-protected.
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 0; //Iniitalize as max volume
 	numberPCMs++;
 /////////////////////////
 // Step 4: Load the compressed ADX data to sound RAM. Unfortunately, we must include the 20 byte header.
@@ -454,86 +454,37 @@ void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_chann
 	m68k_com->cdda_right_channel_vol_pan = right_channel;
 }
 
-
-// -------------------------------------
-// Functions
-// -------------------------------------
-
-/** @brief Gets table of contents
- * @param toc Table of contents data struct
- */
-void CDGetTableOfContents(CDTableOfContents * toc)	
+void CDDA_Play(int fromTrack, int toTrack, Bool loop)
 {
-    CDC_TgetToc((Uint32*)toc);
-}
+    CdcPly ply;
+    CDC_PLY_STYPE(&ply) = CDC_PTYPE_TNO; // track number
+    CDC_PLY_STNO(&ply) = fromTrack;
+    CDC_PLY_SIDX(&ply) = 1;
+    CDC_PLY_ETYPE(&ply) = CDC_PTYPE_TNO;
+    CDC_PLY_ETNO(&ply) = toTrack;
+    CDC_PLY_EIDX(&ply) = 1;
 
-/** @brief Play audio
- * @param fromTrack Start track
- * @param toTrack End track
- * @param loop Loop playback
- * @param startAddress Start address of the playback
- */
-void CDDA_Play(int fromTrack, int toTrack, Bool loop, int startAddress)
-{
-	CdcPly ply;
+    if (loop)
+    {
+        CDC_PLY_PMODE(&ply) = CDC_PM_DFL | 0xf; // 0xf = infinite repetitions
+    }
+    else
+    {
+        CDC_PLY_PMODE(&ply) = CDC_PM_DFL;
+    }
 
-	// Get TOC
-	CDTableOfContents toc;
-	CDGetTableOfContents(&toc);
-
-	// Start of the playback address
-    CDC_PLY_STYPE(&ply) = CDC_PTYPE_FAD; // track number
-
-	if (startAddress == 0)
-	{
-
-		CDC_PLY_SFAD(&ply) = toc.Tracks[fromTrack].fad;
-	}
-	else
-	{
-		CDC_PLY_SFAD(&ply) = startAddress;
-	}
-
-	if (toTrack + 1 < MAX_CD_TRACK_COUNT)
-	{
-		// End of the playback address
-    	CDC_PLY_ETYPE(&ply) = CDC_PTYPE_FAD;
-		CDC_PLY_EFAS(&ply) = toc.Tracks[toTrack + 1].fad - toc.Tracks[fromTrack].fad;
-	}
-	else
-	{
-		// End of the playback is end of the disk
-    	CDC_PLY_ETYPE(&ply) = CDC_PTYPE_DFL;
-	}
-
-	// Playback mode
-    CDC_PLY_PMODE(&ply) = CDC_PM_DFL | (loop ? 0xf : 0); // 0xf = infinite repetitions
-
-	// Start playback
     CDC_CdPlay(&ply);
-}
-
-/** @brief Stop audio playback
- * @return Position of where playback stopped
- */
-int CDDA_Stop(void)
-{
-	// Get current address
-	CdcStat stat;
-	CDC_GetCurStat(&stat);
-
-	// Restore address
-    CdcPos poswk;
-    CDC_POS_PTYPE(&poswk) = CDC_PTYPE_DFL;
-    CDC_CdSeek(&poswk);
-
-	// Last playback address
-	return stat.report.fad;
 }
 
 void CDDA_PlaySingle(int track, Bool loop)
 {
-    CDDA_Play(track, track, loop, 0);
+    CDDA_Play(track, track, loop);
 }
 
+void CDDA_Stop(void)
+{
+    CdcPos poswk;
+    CDC_POS_PTYPE(&poswk) = CDC_PTYPE_DFL;
+    CDC_CdSeek(&poswk);
+}
 

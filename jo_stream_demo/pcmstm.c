@@ -199,7 +199,7 @@ short	add_raw_pcm_buffer(Bool is8Bit, short sampleRate, int size)
 	m68k_com->pcmCtrl[numberPCMs].bytes_per_blank = calculate_bytes_per_blank(sampleRate, is8Bit, PCM_SYS_REGION); //Iniitalize as max volume
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = (is8Bit) ? PCM_TYPE_8BIT : PCM_TYPE_16BIT;
 	m68k_com->pcmCtrl[numberPCMs].loopType = 0; //Initialize as non-looping
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 0; //Iniitalize as max volume
 	numberPCMs++;
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + size);
 	return (numberPCMs-1); //Return the PCM # this sound received
@@ -244,7 +244,7 @@ short	add_adx_front_buffer(short bit_rate)
 	m68k_com->pcmCtrl[numberPCMs].decompression_size = (bpb >= 256) ? lcm(bpb, bpb + 64)<<1 : 5376; // Dirty fix for ultra low bitrate
 	m68k_com->pcmCtrl[numberPCMs].bitDepth = PCM_TYPE_ADX; //Select ADX type
 	m68k_com->pcmCtrl[numberPCMs].loopType = ADX_STREAM; //Initialize as ADX stream.
-	m68k_com->pcmCtrl[numberPCMs].volume = 7; //Iniitalize as max volume
+	m68k_com->pcmCtrl[numberPCMs].volume = 0; //Iniitalize as max volume
 
 	numberPCMs++;
 	scsp_load = (unsigned int *)((unsigned int )scsp_load + adx_buf_sz);
@@ -471,6 +471,7 @@ void		pcm_stream_host(void(*game_code)(void))
 	RESTART:
 
 	cd_init();
+	//GFS_Close(MNG_FILE((GfsMng *)gfsLibWork)); 
 
 	while(1)
 	{

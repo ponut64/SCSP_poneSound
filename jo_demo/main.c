@@ -34,15 +34,18 @@ void			my_draw(void)
 	
 	// jo_printf(0, 18, "Y pans sound from A button");
 	
+	
+	//Please note:
+	//The "volume" entry became a 0-255 scale! It used to be 0-7.
 	if(jo_is_input_key_down(0, JO_KEY_A))
 	{
-	pcm_play(adx4snd, PCM_SEMI, 7);
+	pcm_play(adx4snd, PCM_SEMI, 190);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_B))
 	{
 		jo_printf(0, 14, "(--Loop Play--)");
-	pcm_play(pcm16snd, PCM_ALT_LOOP, 6);
+	pcm_play(pcm16snd, PCM_ALT_LOOP, 190);
 	} else {
 		jo_printf(0, 14, "(--Loop Stop--)");
 	pcm_cease(pcm16snd);
@@ -50,7 +53,7 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
-	pcm_play(pcm8snd, PCM_PROTECTED, 6);
+	pcm_play(pcm8snd, PCM_PROTECTED, 190);
 	}
 	
 	//slSynch();
@@ -60,7 +63,7 @@ void			jo_main(void)
 {
 	jo_core_init(JO_COLOR_Black);
 
-	load_drv(ADX_MASTER_2304);
+	load_drv(ADX_MASTER_1536);
 	////////////////////////////////////////////////
 	// REMINDER: All file names must comply with the 8.3 standard.
 	// File extensions can be no longer than 3 letters.

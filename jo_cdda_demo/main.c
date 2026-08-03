@@ -36,13 +36,13 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_down(0, JO_KEY_A))
 	{
-	pcm_play(adx4snd, PCM_SEMI, 7);
+	pcm_play(adx4snd, PCM_SEMI, 240);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_B))
 	{
 		//jo_printf(0, 14, "(--Loop Play--)");
-	pcm_play(pcm16snd, PCM_ALT_LOOP, 6);
+	pcm_play(pcm16snd, PCM_ALT_LOOP, 200);
 	} else {
 		//jo_printf(0, 14, "(--Loop Stop--)");
 	pcm_cease(pcm16snd);
@@ -50,9 +50,10 @@ void			my_draw(void)
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_C))
 	{
-	pcm_play(pcm8snd, PCM_PROTECTED, 6);
+	pcm_play(pcm8snd, PCM_PROTECTED, 200);
 	}
 	
+	//CDDA Volume is still on a 0-7 scale.
 	if(jo_is_input_key_pressed(0, JO_KEY_Z))
 	{
 		CDDA_PlaySingle(2, true);
