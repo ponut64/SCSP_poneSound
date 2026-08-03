@@ -63,7 +63,7 @@ void			jo_main(void)
 {
 	jo_core_init(JO_COLOR_Black);
 
-	load_drv(ADX_MASTER_1536);
+	load_drv(ADX_MASTER_2304);
 	////////////////////////////////////////////////
 	// REMINDER: All file names must comply with the 8.3 standard.
 	// File extensions can be no longer than 3 letters.
