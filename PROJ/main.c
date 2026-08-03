@@ -341,6 +341,7 @@ void driver_data_init(void) {
     csr[i].pan_send = 0;
   }
   
+ //Credit to TrekkiesUnite118
 //This is a fix for rogue data in slot 1 due to a failure to account for the BIOS' initialization of the SCSP-DSP.
 //MPRO is actually only 512 entries long, but there's another 128 bytes of buffer after it anyway. The original code was going to overwrite 1024 entires.
 // clear DSP RAM:
