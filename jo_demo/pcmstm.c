@@ -23,7 +23,7 @@
 	_file_request_entry * active_request;
 	int number_of_requests = 0;
 
-void	start_file_stream(Sint32 id, void * destination)
+void	start_file_stream(int id, void * destination)
 {
 	if(adx_stream.file.transfer_lock || file.requested || file.setup_requested) return;
 	file.id = id;
@@ -46,7 +46,7 @@ void	file_request_manager(void)
 	}
 }
 
-void	new_file_request(Sint8 * filename, void * destination, void (*handler_function)(void *), short immediate_or_async)
+void	new_file_request(char * filename, void * destination, void (*handler_function)(void *), short immediate_or_async)
 {
 	if(number_of_requests >= MAX_FILE_REQUESTS) return;
 	file_request_list[number_of_requests].id = GFS_NameToId(filename);
@@ -58,7 +58,7 @@ void	new_file_request(Sint8 * filename, void * destination, void (*handler_funct
 	number_of_requests++;
 }
 
-void	new_special_request(Sint8 * filename, void * destination, void (*handler_function)(Sint32, void *))
+void	new_special_request(char * filename, void * destination, void (*handler_function)(int, void *))
 {
 	if(number_of_requests >= MAX_FILE_REQUESTS) return;
 	file_request_list[number_of_requests].id = GFS_NameToId(filename);
@@ -77,7 +77,7 @@ void	load_file_list_immediate(void)
 	*master_volume = 0x200;
 
 	GfsHn gfs_ea;
-	Sint32 file_size;
+	int file_size;
 	
 	for(int i = number_of_requests; i > -1; i--)
 	{
@@ -134,7 +134,7 @@ There is no check to see if it's set-up yet. Ah well, I'm sure you could figure 
 Note, unless the game code is operating within the "pcm_stream_host" function, this will do nothing.
 
 */
-void	start_pcm_stream(Sint8 * filename, int volume)
+void	start_pcm_stream(char * filename, int volume)
 {
 	//If a stream is already playing, re-start it with the new file-name.
 	if(buf.operating || buf.setup_requested)
@@ -186,7 +186,7 @@ void		stop_adx_stream(void)
 	The sound RAM pointer is properly incremented such that this region of memory, and this sound slot, are a playable buffer.
 */
 //
-short	add_raw_pcm_buffer(Bool is8Bit, short sampleRate, int size)
+short	add_raw_pcm_buffer(char is8Bit, short sampleRate, int size)
 {
 	
 	if( (int)scsp_load > 0x7F800) return -1; //Illegal PCM data address, exit
@@ -312,7 +312,7 @@ void	operate_adx_stream(void)
 	Note that if your game code is not operating from with the "pcm_stream_host" function, this will do nothing.
 
 */
-void	start_adx_stream(Sint8 * filename, short volume)
+void	start_adx_stream(char * filename, short volume)
 {
 	// This condition halts operation of the ADX Stream if the front/back buffer are not set up yet.
 	if(!adx_stream.front_buffer_okay || !adx_stream.back_buffer_okay) return;
@@ -350,7 +350,7 @@ void	start_adx_stream(Sint8 * filename, short volume)
 void	pcm_stream_init(int bitrate, int bit_depth)
 {
 
-	static Bool only_run_once = false;
+	static char only_run_once = false;
 		
 	if(only_run_once == false)
 	{
@@ -464,9 +464,9 @@ void		sdrv_stm_vblank_rq(void)
 void		pcm_stream_host(void(*game_code)(void))
 {
 	
-	static Sint32 gfs_svr_status;
-	static Sint32 bytes_read_now;
-	static Sint32 byte_dummy;
+	static int gfs_svr_status;
+	static int bytes_read_now;
+	static int byte_dummy;
 	
 	RESTART:
 

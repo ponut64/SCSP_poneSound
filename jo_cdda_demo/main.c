@@ -56,12 +56,12 @@ void			my_draw(void)
 	//CDDA Volume is still on a 0-7 scale.
 	if(jo_is_input_key_pressed(0, JO_KEY_Z))
 	{
-		CDDA_PlaySingle(2, true);
+		jo_audio_play_cd_track(6, 6, true);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_Y))
 	{
-		CDDA_SetVolume(2);
+		jo_audio_set_cd_volume(2);
 	}
 	
 	if(jo_is_input_key_pressed(0, JO_KEY_X))
@@ -89,11 +89,11 @@ void			jo_main(void)
 	To convert a sound to 8-bit
 	ffmpeg -i %this%.wav -f s8 -ac 1 -ar (bitrate) %this%.PCM
 	*/
-	 pcm16snd = load_16bit_pcm((Sint8 *)"DEF_FLAG.PCM", 15360);
-	 pcm8snd = load_8bit_pcm((Sint8 *)"HAV_FLAG.PCM", 15360);
-	 adx4snd = load_adx((Sint8 *)"NBGM.ADX");
+	 pcm16snd = load_16bit_pcm("DEF_FLAG.PCM", 15360);
+	 pcm8snd = load_8bit_pcm("HAV_FLAG.PCM", 15360);
+	 adx4snd = load_adx("NBGM.ADX");
 
-	slZoomNbg0(65535, 73720);
+	//slZoomNbg0(65535, 73720);
 	jo_core_add_vblank_callback(sdrv_vblank_rq);
 	jo_core_add_callback(my_draw);
 	jo_core_run();

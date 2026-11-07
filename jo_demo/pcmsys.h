@@ -126,8 +126,8 @@ typedef struct {
 
 typedef struct {
 	volatile unsigned int adx_stream_length; //Length of the ADX stream (in ADX frames)
-	volatile unsigned short start; //System Start Boolean
-	volatile char	adx_buffer_pass[2]; //Booleans
+	volatile unsigned short start; //System Start charean
+	volatile char	adx_buffer_pass[2]; //chareans
 	volatile short drv_adx_coef_1; //The (signed!) coefficient 1 the driver will use to build ADX multiplication tables.
 	volatile short drv_adx_coef_2; //The (signed!) coefficient 2 the driver will use to build ADX multiplication tables.
 	volatile _PCM_CTRL * pcmCtrl;
@@ -147,7 +147,7 @@ typedef struct {
 	unsigned int sample_ct;
 	unsigned short hp_cutoff; //[this should be 500]
 	unsigned char loop;
-	unsigned char illegal; //[Boolean, 0 for false, 1 for true]
+	unsigned char illegal; //[charean, 0 for false, 1 for true]
 } adx_header;
 
 //
@@ -163,7 +163,7 @@ extern short numberPCMs;
 // System functions shared for pcmstm.c/h
 //
 short			convert_bitrate_to_pitchword(short sampleRate);
-short			calculate_bytes_per_blank(int sampleRate, Bool is8Bit, Bool isPAL);
+short			calculate_bytes_per_blank(int sampleRate, char is8Bit, char isPAL);
 short 			lcm(short a, short b);
 void			cd_init(void);
 
@@ -176,9 +176,9 @@ void	smpc_issue_command(unsigned char cmd);
 //
 //
 
-short	load_16bit_pcm(Sint8 * filename, int sampleRate);
-short	load_8bit_pcm(Sint8 * filename, int sampleRate);
-short	load_adx(Sint8 * filename);
+short	load_16bit_pcm(char * filename, int sampleRate);
+short	load_8bit_pcm(char * filename, int sampleRate);
+short	load_adx(char * filename);
 void	load_drv(int master_adx_frequency);
 
 void	set_master_volume(unsigned short volume);
@@ -207,8 +207,8 @@ void	sdrv_vblank_rq(void);
 
 void CDDA_SetVolume(int vol);
 void CDDA_SetChannelVolPan(unsigned char left_channel, unsigned char right_channel);
-void CDDA_Play(int fromTrack, int toTrack, Bool loop);
-void CDDA_PlaySingle(int track, Bool loop);
+void CDDA_Play(int fromTrack, int toTrack, char loop);
+void CDDA_PlaySingle(int track, char loop);
 void CDDA_Stop(void);
 
 
